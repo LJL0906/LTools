@@ -775,6 +775,9 @@
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-md);
   outline: none;
+  /* 全局 font-synthesis: none 会禁止合成斜体（Geist 无 italic 变体），
+     编辑器内恢复合成，保证 <em> 倾斜可见 */
+  font-synthesis: style weight;
 }
 
 .note-editor__content .ProseMirror:focus {
