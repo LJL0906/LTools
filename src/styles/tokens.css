@@ -1,0 +1,34 @@
+﻿:root {
+  --color-bg-app: #fff;
+  --color-bg-header: #fafafa;
+  --color-bg-sidebar: #f1f1f3;
+  --color-bg-sidebar-notes: #f4f4f5;
+  --color-bg-active: #e4e9f2;
+  --color-bg-nav-active: #e7efff;
+  --color-bg-card: #fbfbfc;
+  --color-bg-toolbar: #fafafa;
+  --color-primary: #3174df;
+  --color-primary-text: #2463d1;
+  --color-text: #202124;
+  --color-text-secondary: #6f7780;
+  --color-text-muted: #8a9098;
+  --color-border: #dadde1;
+  --color-border-soft: #e0e3e7;
+  --color-danger: #d24b4b;
+  --radius-sm: 5px;
+  --radius-md: 7px;
+  --radius-lg: 9px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --header-height: 64px;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", system-ui, sans-serif;
+  color: var(--color-text);
+  background: #e9ebee;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}

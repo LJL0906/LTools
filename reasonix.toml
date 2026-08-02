@@ -1,0 +1,2 @@
+[permissions]
+allow = ["Bash=cd \"D:\\project\\ljl\\project\" && for d in ai-tech-radar money myBlog nextjs postgresSql tools wx_mini_program; do echo \"=== $d ===\"; find \"$d\" -type f \\( -name \"*.tsx\" -o -name \"*.ts\" -o -name \"*.vue\" -o -name \"*.jsx\" -o -name \"*.js\" \\) -not -path \"*/node_modules/*\" -not -path \"*/.next/*\" -not -path \"*/dist/*\" 2>/dev/null | head -5; done"]
