@@ -781,6 +781,116 @@
   box-shadow: 0 0 0 1px var(--ring);
 }
 
+/* ---- Tiptap 内容排版：恢复 Tailwind preflight 抹掉的标记与缩进 ---- */
+.note-editor__content .ProseMirror > * + * {
+  margin-top: var(--space-3);
+}
+
+.note-editor__content .ProseMirror ul {
+  list-style: disc;
+  padding-left: var(--space-5);
+}
+
+.note-editor__content .ProseMirror ol {
+  list-style: decimal;
+  padding-left: var(--space-5);
+}
+
+.note-editor__content .ProseMirror li + li {
+  margin-top: var(--space-1);
+}
+
+.note-editor__content .ProseMirror li > p {
+  margin: 0;
+}
+
+/* 待办清单：去掉默认标记，checkbox 与内容并排 */
+.note-editor__content .ProseMirror ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0;
+}
+
+.note-editor__content .ProseMirror ul[data-type="taskList"] li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.note-editor__content .ProseMirror ul[data-type="taskList"] li > label {
+  flex: 0 0 auto;
+  margin: 0;
+  user-select: none;
+}
+
+.note-editor__content .ProseMirror ul[data-type="taskList"] li > div {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.note-editor__content .ProseMirror blockquote {
+  margin: var(--space-3) 0;
+  padding-left: var(--space-3);
+  border-left: 3px solid var(--color-border-strong, #dfe2e6);
+  color: var(--color-text-secondary);
+}
+
+.note-editor__content .ProseMirror pre {
+  margin: var(--space-3) 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: #f3f4f6;
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-x: auto;
+}
+
+.note-editor__content .ProseMirror code {
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  background: #f3f4f6;
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.note-editor__content .ProseMirror pre code {
+  padding: 0;
+  background: transparent;
+}
+
+.note-editor__content .ProseMirror a {
+  color: var(--color-primary);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.note-editor__content .ProseMirror h1 {
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.note-editor__content .ProseMirror h2 {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.note-editor__content .ProseMirror h3 {
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.note-editor__content .ProseMirror hr {
+  border: 0;
+  border-top: 1px solid var(--color-border-soft);
+  margin: var(--space-4) 0;
+}
+
+.note-editor__content .ProseMirror img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-md);
+}
+
 .dialog-backdrop {
   position: fixed;
   z-index: 100;

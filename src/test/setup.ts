@@ -47,6 +47,16 @@ if (!Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => undefined;
 }
 
+// jsdom 未实现 Text/Range 的 getClientRects；ProseMirror 的 scrollToSelection
+// （coordsAtPos → singleRect）会调用，缺失时异步抛出 TypeError。
+if (typeof Text.prototype.getClientRects !== "function") {
+  Text.prototype.getClientRects = () => [];
+}
+
+if (typeof Range.prototype.getClientRects !== "function") {
+  Range.prototype.getClientRects = () => [];
+}
+
 // jsdom 未实现 elementFromPoint / caretRangeFromPoint，ProseMirror 的点击命中检测
 // （posAtCoords）依赖它们；缺失会导致 click 事件处理器抛错、选区无法同步。
 // 返回编辑器内容区作为命中元素（布局尺寸为 0，坐标计算退化为 doc 内首个位置）。
