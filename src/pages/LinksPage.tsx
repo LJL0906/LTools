@@ -49,6 +49,7 @@ import {
   type LinkDraft,
   type LinkItem,
 } from "../features/links/types";
+import { loadState, saveState, STORAGE_KEYS } from "../lib/storage";
 
 const initialLinks: LinkItem[] = [
   {
@@ -179,8 +180,10 @@ interface LinksPageProps {
 }
 
 export function LinksPage({ searchQuery = "" }: LinksPageProps) {
-  const [groups, setGroups] = useState(initialGroups);
-  const [links, setLinks] = useState(initialLinks);
+  const [groups, setGroups] = useState(() =>
+    loadState(STORAGE_KEYS.linkGroups, initialGroups),
+  );
+  const [links, setLinks] = useState(() => loadState(STORAGE_KEYS.links, initialLinks));
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [activeMenuGroupId, setActiveMenuGroupId] = useState<string | null>(null);
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
@@ -193,6 +196,15 @@ export function LinksPage({ searchQuery = "" }: LinksPageProps) {
   const [copyErrorLinkId, setCopyErrorLinkId] = useState<string | null>(null);
   const [activeMenuLinkId, setActiveMenuLinkId] = useState<string | null>(null);
   const [menuPosition, setMenuPosition] = useState<{ top: number; right: number } | null>(null);
+
+  /** 数据变更后实时写入 localStorage（无保存按钮的自动持久化） */
+  useEffect(() => {
+    saveState(STORAGE_KEYS.links, links);
+  }, [links]);
+
+  useEffect(() => {
+    saveState(STORAGE_KEYS.linkGroups, groups);
+  }, [groups]);
 
   useEffect(() => {
     if (!copiedLinkId) return;

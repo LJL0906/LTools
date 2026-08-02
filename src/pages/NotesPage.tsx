@@ -18,6 +18,7 @@ import { AccordionGroup } from "../features/groups/GroupTree";
 import type { AccordionNote } from "../features/groups/GroupTree";
 import type { GroupItem } from "../features/groups/types";
 import { NoteEditor } from "../features/notes/NoteEditor";
+import { loadState, saveState, STORAGE_KEYS } from "../lib/storage";
 
 interface NoteItem {
   content: string;
@@ -150,8 +151,10 @@ function NotesSidebar({
 
 export function NotesPage() {
   const { searchQuery } = useOutletContext<AppOutletContext>();
-  const [groups, setGroups] = useState(initialNoteGroups);
-  const [notes, setNotes] = useState(initialNotes);
+  const [groups, setGroups] = useState(() =>
+    loadState(STORAGE_KEYS.noteGroups, initialNoteGroups),
+  );
+  const [notes, setNotes] = useState(() => loadState(STORAGE_KEYS.notes, initialNotes));
   const [expandedGroupId, setExpandedGroupId] = useState<string | null>("__all__");
   const [activeNoteId, setActiveNoteId] = useState(initialNotes[0].id);
   const [activeMenuGroupId, setActiveMenuGroupId] = useState<string | null>(null);
@@ -212,6 +215,15 @@ export function NotesPage() {
     setNotes((currentNotes) => [note, ...currentNotes]);
     setActiveNoteId(note.id);
   };
+
+  /** 数据变更后实时写入 localStorage（无保存按钮的自动持久化） */
+  useEffect(() => {
+    saveState(STORAGE_KEYS.notes, notes);
+  }, [notes]);
+
+  useEffect(() => {
+    saveState(STORAGE_KEYS.noteGroups, groups);
+  }, [groups]);
 
   const handleToggleExpand = (groupId: string | null) => {
     setExpandedGroupId((prev) => (prev === groupId ? null : groupId));

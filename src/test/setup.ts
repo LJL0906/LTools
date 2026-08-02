@@ -82,4 +82,6 @@ if (typeof document.caretRangeFromPoint !== "function") {
 
 afterEach(() => {
   cleanup();
+  // 持久化数据在测试间共享，必须清理，否则影响"恢复默认数据"类断言
+  localStorage.clear();
 });
