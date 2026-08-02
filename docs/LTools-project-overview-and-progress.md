@@ -2,7 +2,7 @@
 
 - **项目名称：** LTools
 - **当前版本：** 0.1.0
-- **最后更新：** 2026-07-30
+- **最后更新：** 2026-08-02
 - **项目路径：** `D:\project\ljl\project\LTools`
 - **文档定位：** 项目基础信息、当前进度和后续任务的唯一非 UI 文档
 
@@ -29,7 +29,7 @@ LTools 是面向 Windows 10/11 的本地优先桌面效率工具，计划提供�
 - TypeScript 5.8
 - Vite 7
 - React Router 7
-- Zustand 5
+- Zustand 5（依赖已安装，尚未使用）
 - pnpm 11
 - Node.js 22+
 
@@ -75,19 +75,25 @@ Rust 工程已经建立，依赖包含 `rusqlite`、`uuid`、`time`、`zip`、`i
 LTools/
 ├── docs/
 │   ├── LTools-project-overview-and-progress.md
-│   └── ui/
+│   ├── ui/                # UI 设计规范与 V9 原型
+│   └── superpowers/       # 历史实施计划与设计规格
 ├── public/
 ├── src/
 │   ├── components/
-│   │   ├── layout/
-│   │   └── ui/
+│   │   ├── layout/        # AppShell / TopNavigation / ModuleLayout
+│   │   ├── shadcn/ui/     # shadcn 生成组件
+│   │   └── ui/            # 业务包装组件（Button / Dialog / SearchBox 等）
 │   ├── features/
-│   │   ├── groups/
-│   │   └── links/
-│   ├── pages/
-│   ├── styles/
+│   │   ├── groups/        # 分组管理
+│   │   └── links/         # 链接模块
+│   ├── pages/             # LinksPage / NotesPage / 占位页
+│   ├── styles/            # tokens.css / global.css / App.css
+│   ├── lib/
 │   └── test/
 ├── src-tauri/
+│   ├── src/               # main.rs / lib.rs（脚手架：插件注册 + 窗口初始化）
+│   ├── capabilities/      # 前端权限配置
+│   └── tauri.conf.json
 ├── package.json
 └── vite.config.ts
 ```
@@ -159,9 +165,11 @@ UI 文档统一保存在：
 
 ```text
 Test Files  7 passed
-Tests      22 passed
+Tests      24 passed
 pnpm build passed
 ```
+
+（2026-08-02 实测：`pnpm exec vitest run` 7 文件 / 24 用例全部通过，含侧栏拖拽、分组管理、链接与笔记 CRUD 交互、可访问性语义。）
 
 该结果只代表当前前端静态交互和构建基线，不代表数据库、正式富文本或完整 Tauri 系统集成已经完成。
 
@@ -232,6 +240,10 @@ pnpm build passed
 5. 当前数据均为 React 内存状态，刷新后恢复示例数据。
 6. 搜索状态下编辑内容可能使当前条目不再匹配并离开结果。
 7. 当前 UI 仍需继续复查字号、搜索框和控件密度；侧栏宽度已支持公共拖拽调整。
+8. capabilities 中 `global-shortcut:default` 实际授予 0 个命令（Tauri 默认策略：快捷键默认不开放），前端调用快捷键 `register`/`isRegistered` 会被拒绝；接入快捷键业务前需显式授予权限。
+9. Rust 侧 8 个预留依赖（rusqlite、uuid、time、thiserror、zip、image、sha2、windows）当前源码零引用，属“死依赖”，会拖慢编译与增大二进制；建议在真正接入对应功能时再启用。
+10. `index.html` 的 `<title>` 与 `lang` 仍是脚手架默认（“Tauri + React + Typescript” / en），未随产品改名。
+11. 前端存在少量备用资产/死代码：`GroupSelector` 组件、shadcn 的 `dropdown-menu`/`field`/`separator`、sonner Toaster（已挂载但无调用点），接入后续功能时可复用或清理。
 
 ## 13. 推荐开发顺序
 
