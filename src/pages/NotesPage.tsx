@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useOutletContext } from "react-router-dom";
-import { Folder, FolderPlus } from "lucide-react";
+import { Folder, FolderPlus, Trash2 } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -285,7 +285,7 @@ export function NotesPage() {
                 value={activeNote.title}
               />
               <IconButton aria-label="删除笔记" onClick={() => setIsDeletingNote(true)}>
-                ⌫
+                <Trash2 aria-hidden="true" size={16} />
               </IconButton>
             </div>
             <NoteEditor
