@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 
 describe("notes static interactions", () => {
@@ -33,9 +33,16 @@ describe("notes static interactions", () => {
     await user.type(title, "临时记录");
     expect(screen.getByRole("button", { name: "临时记录" })).toBeInTheDocument();
 
+    // 先聚焦编辑器建立选区，再验证格式化状态真实生效
+    const noteContent = screen.getByRole("textbox", { name: "笔记内容" });
+    await user.click(noteContent);
+
     const bold = screen.getByRole("button", { name: "粗体" });
     await user.click(bold);
     expect(bold).toHaveAttribute("aria-pressed", "true");
+    // 再点一次应真实关闭格式（由编辑器内部状态驱动）
+    await user.click(bold);
+    expect(bold).toHaveAttribute("aria-pressed", "false");
 
     await user.click(screen.getByRole("button", { name: "删除笔记" }));
     expect(screen.getByRole("dialog", { name: "删除笔记" })).toBeInTheDocument();
@@ -66,5 +73,35 @@ describe("notes static interactions", () => {
 
     expect(screen.getByRole("button", { name: "新建笔记" })).toBeInTheDocument();
     expect(screen.getByText("暂无笔记")).toBeInTheDocument();
+  });
+
+  it("inserts a link with the toolbar link button", async () => {
+    vi.stubGlobal("prompt", () => "https://example.com");
+    const user = userEvent.setup();
+    render(<App />);
+
+    const noteContent = screen.getByRole("textbox", { name: "笔记内容" });
+    await user.click(noteContent);
+
+    const linkButton = screen.getByRole("button", { name: "插入链接" });
+    await user.click(linkButton);
+
+    // 链接 mark 已应用到当前选区，按钮状态由编辑器内部驱动
+    expect(linkButton).toHaveAttribute("aria-pressed", "true");
+    vi.unstubAllGlobals();
+  });
+
+  it("syncs the rich text editor when switching notes", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const mirror = document.querySelector(".ProseMirror");
+    expect(mirror?.textContent).toContain("本次会议确认首版功能范围");
+
+    await user.click(screen.getByRole("button", { name: "接口排查记录" }));
+
+    expect(document.querySelector(".ProseMirror")?.textContent).toContain(
+      "记录接口排查过程",
+    );
   });
 });

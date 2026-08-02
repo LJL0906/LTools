@@ -47,6 +47,25 @@ if (!Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => undefined;
 }
 
+// jsdom 未实现 elementFromPoint / caretRangeFromPoint，ProseMirror 的点击命中检测
+// （posAtCoords）依赖它们；缺失会导致 click 事件处理器抛错、选区无法同步。
+// 返回编辑器内容区作为命中元素（布局尺寸为 0，坐标计算退化为 doc 内首个位置）。
+// 注意：这是全局 mock，会影响渲染 .ProseMirror 的所有测试文件；当前测试集无冲突。
+if (typeof document.elementFromPoint !== "function") {
+  document.elementFromPoint = () =>
+    document.querySelector(".ProseMirror") ?? document.body;
+}
+
+if (typeof document.caretRangeFromPoint !== "function") {
+  document.caretRangeFromPoint = () => {
+    const mirror = document.querySelector(".ProseMirror");
+    if (!mirror?.firstChild) return null;
+    const range = document.createRange();
+    range.setStart(mirror.firstChild, 0);
+    return range;
+  };
+}
+
 afterEach(() => {
   cleanup();
 });

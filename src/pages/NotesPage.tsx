@@ -17,6 +17,7 @@ import { GroupDialog } from "../features/groups/GroupDialog";
 import { AccordionGroup } from "../features/groups/GroupTree";
 import type { AccordionNote } from "../features/groups/GroupTree";
 import type { GroupItem } from "../features/groups/types";
+import { NoteEditor } from "../features/notes/NoteEditor";
 
 interface NoteItem {
   content: string;
@@ -37,37 +38,24 @@ const initialNotes: NoteItem[] = [
   {
     id: "meeting",
     title: "项目会议记录",
-    content: "本次会议确认首版功能范围。",
+    content: "<p>本次会议确认首版功能范围。</p>",
     groupId: "project-a",
     time: "今天 14:32",
   },
   {
     id: "api-debug",
     title: "接口排查记录",
-    content: "记录接口排查过程。",
+    content: "<p>记录接口排查过程。</p>",
     groupId: "work",
     time: "昨天 18:10",
   },
   {
     id: "release-check",
     title: "发布检查清单",
-    content: "确认发布前检查项。",
+    content: "<p>确认发布前检查项。</p>",
     groupId: null,
     time: "7 月 28 日",
   },
-];
-
-const toolbarItems = [
-  { label: "粗体", content: "B", className: "is-bold" },
-  { label: "斜体", content: "I", className: "is-italic" },
-  { label: "删除线", content: "S", className: "is-strike" },
-  { label: "项目符号列表", content: "•" },
-  { label: "编号列表", content: "1." },
-  { label: "待办清单", content: "☑" },
-  { label: "插入链接", content: "↗" },
-  { label: "代码块", content: "</>" },
-  { label: "引用", content: "❝" },
-  { label: "插入图片", content: "▧" },
 ];
 
 function toAccordionNotes(notes: NoteItem[]): AccordionNote[] {
@@ -171,14 +159,15 @@ export function NotesPage() {
   const [editingGroup, setEditingGroup] = useState<GroupItem | null>(null);
   const [deletingGroup, setDeletingGroup] = useState<GroupItem | null>(null);
   const [isDeletingNote, setIsDeletingNote] = useState(false);
-  const [activeFormats, setActiveFormats] = useState<string[]>([]);
 
   /** 仅按搜索词过滤（不按分组过滤，分组过滤由 AccordionGroup 内部处理） */
   const filteredNotes = useMemo(() => {
     const query = searchQuery.trim().toLocaleLowerCase();
     if (!query) return notes;
     return notes.filter((note) =>
-      `${note.title} ${note.content}`.toLocaleLowerCase().includes(query),
+      `${note.title} ${note.content.replace(/<[^>]*>/g, " ")}`
+        .toLocaleLowerCase()
+        .includes(query),
     );
   }, [notes, searchQuery]);
 
@@ -194,7 +183,6 @@ export function NotesPage() {
   useEffect(() => {
     if (!visibleNotesInGroup.some((note) => note.id === activeNoteId)) {
       setActiveNoteId(visibleNotesInGroup[0]?.id ?? "");
-      setActiveFormats([]);
     }
   }, [activeNoteId, visibleNotesInGroup]);
 
@@ -223,7 +211,6 @@ export function NotesPage() {
     };
     setNotes((currentNotes) => [note, ...currentNotes]);
     setActiveNoteId(note.id);
-    setActiveFormats([]);
   };
 
   const handleToggleExpand = (groupId: string | null) => {
@@ -275,7 +262,6 @@ export function NotesPage() {
             }}
             onSelectNote={(noteId) => {
               setActiveNoteId(noteId);
-              setActiveFormats([]);
             }}
             onToggleExpand={handleToggleExpand}
           />
@@ -302,38 +288,9 @@ export function NotesPage() {
                 ⌫
               </IconButton>
             </div>
-            <div className="editor-toolbar" aria-label="富文本工具栏" role="toolbar">
-              {toolbarItems.map((item, index) => {
-                const isActive = activeFormats.includes(item.label);
-                return (
-                  <span className="editor-toolbar__item-wrap" key={item.label}>
-                    {index === 3 || index === 6 ? (
-                      <span aria-hidden="true" className="editor-toolbar__separator" />
-                    ) : null}
-                    <button
-                      aria-label={item.label}
-                      aria-pressed={isActive}
-                      className={item.className}
-                      onClick={() =>
-                        setActiveFormats((currentFormats) =>
-                          isActive
-                            ? currentFormats.filter((format) => format !== item.label)
-                            : [...currentFormats, item.label],
-                        )
-                      }
-                      type="button"
-                    >
-                      {item.content}
-                    </button>
-                  </span>
-                );
-              })}
-            </div>
-            <textarea
-              aria-label="笔记内容"
-              className="note-content-input"
-              onChange={(event) => updateActiveNote({ content: event.target.value })}
-              value={activeNote.content}
+            <NoteEditor
+              content={activeNote.content}
+              onChange={(html) => updateActiveNote({ content: html })}
             />
           </article>
         ) : (
