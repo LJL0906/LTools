@@ -33,6 +33,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -40,5 +41,13 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEU1Mjg5RTYwOTVBOTc1RjEKUldUeGRhbVZZSjRvNWYwOTZGT3M5Y2FBLzZZanFoV0cxOGZDQkljS3BaRjZ1dHlqN0k3ci8xSloK",
+      "endpoints": [
+        "https://github.com/LJL0906/LTools/releases/latest/download/latest.json"
+      ]
+    }
   }
 }

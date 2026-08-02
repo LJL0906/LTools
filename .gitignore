@@ -30,3 +30,8 @@ src-tauri/gen/schemas
 .claude
 .superpowers
 .vscode
+# Tauri updater signing keys (private, never commit)
+.tauri/
+
+# Playwright MCP test artifacts
+.playwright-mcp/

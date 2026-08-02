@@ -9,12 +9,19 @@ import {
 
 interface DialogProps {
   children: ReactNode;
+  className?: string;
   footer?: ReactNode;
   onClose: () => void;
   title: string;
 }
 
-export function Dialog({ children, footer, onClose, title }: DialogProps) {
+export function Dialog({
+  children,
+  className = "",
+  footer,
+  onClose,
+  title,
+}: DialogProps) {
   return (
     <ShadcnDialog
       onOpenChange={(open) => {
@@ -24,7 +31,7 @@ export function Dialog({ children, footer, onClose, title }: DialogProps) {
     >
       <DialogContent
         aria-describedby={undefined}
-        className="dialog gap-0 p-0 sm:max-w-none"
+        className={`dialog gap-0 p-0 sm:max-w-none${className ? ` ${className}` : ""}`}
         showCloseButton={false}
       >
         <header className="dialog__header">

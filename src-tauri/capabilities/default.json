@@ -1,13 +1,26 @@
-{
-  "$schema": "../gen/schemas/desktop-schema.json",
-  "identifier": "default",
-  "description": "Minimal capabilities for the LTools main window",
-  "windows": ["main"],
-  "permissions": [
-    "core:default",
-    "autostart:default",
-    "dialog:default",
-    "global-shortcut:default",
-    "opener:default"
-  ]
-}
+[
+  {
+    "$schema": "../gen/schemas/desktop-schema.json",
+    "identifier": "default",
+    "description": "Capabilities for the LTools main window",
+    "windows": ["main"],
+    "permissions": [
+      "core:default",
+      "autostart:default",
+      "dialog:default",
+      "global-shortcut:default",
+      "opener:default",
+      "updater:default"
+    ]
+  },
+  {
+    "identifier": "search",
+    "description": "Capabilities for the quick search window (label=search)",
+    "windows": ["search"],
+    "permissions": [
+      "core:default",
+      "core:event:default",
+      "opener:default"
+    ]
+  }
+]

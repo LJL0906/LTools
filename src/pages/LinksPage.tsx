@@ -49,7 +49,8 @@ import {
   type LinkDraft,
   type LinkItem,
 } from "../features/links/types";
-import { loadState, saveStateDebounced, STORAGE_KEYS } from "../lib/storage";
+import { loadState, STORAGE_KEYS } from "../lib/storage";
+import { loadLinksData, isTauriRuntime, persistLinks } from "../lib/data";
 
 const initialLinks: LinkItem[] = [
   {
@@ -197,14 +198,24 @@ export function LinksPage({ searchQuery = "" }: LinksPageProps) {
   const [activeMenuLinkId, setActiveMenuLinkId] = useState<string | null>(null);
   const [menuPosition, setMenuPosition] = useState<{ top: number; right: number } | null>(null);
 
-  /** 数据变更后防抖写入 localStorage（无保存按钮的自动持久化） */
+  /** 首次加载：Tauri 用 SQLite 数据覆盖初始值（含一次性迁移）；浏览器初始值即最终值 */
   useEffect(() => {
-    saveStateDebounced(STORAGE_KEYS.links, links);
-  }, [links]);
+    if (!isTauriRuntime()) return;
+    let disposed = false;
+    void loadLinksData().then(({ links: dbLinks, linkGroups: dbGroups }) => {
+      if (disposed) return;
+      setLinks(dbLinks);
+      setGroups(dbGroups);
+    });
+    return () => {
+      disposed = true;
+    };
+  }, []);
 
+  /** 数据变更后持久化（Tauri → SQLite 快照写；浏览器 → localStorage 防抖） */
   useEffect(() => {
-    saveStateDebounced(STORAGE_KEYS.linkGroups, groups);
-  }, [groups]);
+    persistLinks(links, groups);
+  }, [links, groups]);
 
   useEffect(() => {
     if (!copiedLinkId) return;

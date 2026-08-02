@@ -1,6 +1,7 @@
 ﻿.app-frame {
   width: 100%;
   height: 100dvh;
+  min-width: 640px;
   min-height: 400px;
   overflow: hidden;
   background: var(--color-bg-app);
@@ -1027,6 +1028,7 @@
   }
 
   .links-content,
+  .clipboard-page,
   .note-editor__title-row,
   .note-editor__content {
     padding-right: var(--space-3);
@@ -1148,3 +1150,535 @@
 }
 
 
+
+/* ---- 剪切板模块 ---- */
+.clipboard-page {
+  height: calc(100dvh - var(--header-height));
+  min-height: calc(400px - var(--header-height));
+  overflow-y: auto;
+  padding: 18px;
+  background:
+    radial-gradient(circle at 100% 0, rgba(49, 116, 223, 0.055), transparent 280px),
+    #fff;
+}
+
+.clipboard-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: 12px;
+}
+
+.clipboard-toolbar__clear {
+  height: 30px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.clipboard-toolbar__clear:hover {
+  background: #f4f5f7;
+  color: var(--color-danger);
+}
+
+.clipboard-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.clipboard-item {
+  overflow: hidden;
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-md);
+  background: #fff;
+}
+
+.clipboard-item:hover {
+  border-color: #c9d3e2;
+}
+
+.clipboard-item__copy {
+  width: 100%;
+  display: block;
+  padding: 10px var(--space-3) 6px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font-size: 13px;
+  line-height: 1.55;
+  text-align: left;
+  cursor: pointer;
+}
+
+.clipboard-item__copy:hover {
+  background: #f7f9fc;
+}
+
+.clipboard-item__text {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.clipboard-item__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 2px var(--space-3) 8px;
+}
+
+.clipboard-item__meta {
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.clipboard-item__actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.clipboard-item__actions .icon-button {
+  width: 26px;
+  height: 26px;
+}
+
+.icon-button--danger:hover {
+  background: #fef2f2;
+  color: var(--color-danger);
+}
+
+.clipboard-dialog__textarea {
+  width: 100%;
+  min-height: 120px;
+  resize: vertical;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid #cfd5dc;
+  border-radius: var(--radius-sm);
+  background: #fff;
+  color: var(--color-text);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.clipboard-dialog--detail {
+  width: min(420px, 100%);
+  max-height: min(78dvh, 520px);
+  display: flex;
+  flex-direction: column;
+}
+
+.clipboard-dialog--detail .dialog__body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+}
+
+.clipboard-detail__text {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-sm);
+  background: #fafbfc;
+  color: var(--color-text);
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.clipboard-dialog__textarea:focus {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -1px;
+}
+
+.clipboard-empty-state {
+  min-height: min(310px, calc(100dvh - 154px));
+  margin-top: 4px;
+  border: 1px dashed #d9dee5;
+  border-radius: 12px;
+  background: rgba(249, 250, 251, 0.72);
+}
+
+.clipboard-empty-state [data-slot="empty-icon"] {
+  color: #667281;
+  background: #eef2f7;
+}
+
+.clipboard-empty-state [data-slot="empty-title"] {
+  font-size: 14px;
+}
+
+.clipboard-empty-state [data-slot="empty-description"] {
+  max-width: 320px;
+  font-size: 12px;
+}
+
+/* ---- 设置模块 ---- */
+.settings-page {
+  height: calc(100dvh - var(--header-height));
+  min-height: calc(400px - var(--header-height));
+  overflow-y: auto;
+  padding: var(--space-4);
+  background: #fff;
+}
+
+.settings-page > * + * {
+  margin-top: var(--space-4);
+}
+
+.settings-notice {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 6px var(--space-3);
+  border: 1px solid #bcd4f7;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-nav-active);
+  color: var(--color-primary-text);
+  font-size: 12px;
+}
+
+.settings-section {
+  padding: var(--space-4);
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-card);
+}
+
+.settings-section > * + * {
+  margin-top: var(--space-4);
+}
+
+.settings-section__title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.settings-row__meta {
+  min-width: 0;
+}
+
+.settings-row__label {
+  font-size: 13px;
+  color: var(--color-text);
+}
+
+.settings-row__description {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.settings-row__control {
+  flex-shrink: 0;
+}
+
+.settings-window-size,
+.settings-shortcut {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.settings-window-size__input,
+.settings-shortcut__input {
+  height: 30px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  font-size: 13px;
+}
+
+.settings-window-size__input {
+  width: 72px;
+  padding: 0 var(--space-2);
+}
+
+.settings-shortcut__input {
+  width: 180px;
+  padding: 0 var(--space-2);
+}
+
+.settings-window-size__input:focus,
+.settings-shortcut__input:focus {
+  border-color: var(--color-primary);
+  outline: none;
+}
+
+.settings-about__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.settings-about__actions .button {
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+@media (max-width: 800px) {
+  .settings-window-size__input {
+    width: 64px;
+  }
+
+  .settings-shortcut__input {
+    width: 140px;
+  }
+}
+
+.settings-path {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 340px;
+}
+
+.settings-path__value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  text-align: right;
+}
+
+/* ---- 快捷搜索窗口 ---- */
+.quick-search {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-4);
+  background: #fff;
+}
+
+.quick-search__input-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-2);
+  height: 38px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: #fff;
+}
+
+.quick-search__input-row:focus-within {
+  border-color: var(--color-primary);
+}
+
+.quick-search__icon {
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.quick-search__input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font-size: 14px;
+  color: var(--color-text);
+}
+
+/* 覆盖全局 input:focus-visible outline，避免输入框自身出现多余边框；
+   聚焦指示由外层 .quick-search__input-row:focus-within 的边框提供 */
+.quick-search__input:focus,
+.quick-search__input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.quick-search__hint {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border-soft);
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+
+.quick-search__placeholder {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.quick-search__list {
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.quick-search__item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 8px var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.quick-search__item:hover,
+.quick-search__item:focus-visible {
+  background: var(--color-bg-active);
+  outline: none;
+}
+
+.quick-search__badge {
+  flex-shrink: 0;
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 4px;
+}
+
+.quick-search__badge--link {
+  background: var(--color-bg-nav-active);
+  color: var(--color-primary-text);
+}
+
+.quick-search__badge--note {
+  background: #eef2ec;
+  color: #3a6b35;
+}
+
+.quick-search__item-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.quick-search__item-title {
+  font-size: 13px;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quick-search__item-subtitle {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- 快捷键绑定器 ---- */
+.shortcut-recorder {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.shortcut-recorder__input {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  min-width: 180px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  font-size: 13px;
+  color: var(--color-text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.shortcut-recorder__input:hover {
+  border-color: #c9d3e2;
+}
+
+.shortcut-recorder__input:focus-visible {
+  border-color: var(--color-primary);
+  outline: none;
+}
+
+.shortcut-recorder.is-recording .shortcut-recorder__input {
+  border-color: var(--color-primary);
+  background: var(--color-bg-nav-active);
+}
+
+.shortcut-recorder__icon {
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.shortcut-recorder__hint {
+  color: var(--color-primary-text);
+}
+
+.shortcut-recorder__value {
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.2px;
+}
+
+.shortcut-recorder__empty {
+  color: var(--color-text-muted);
+}
+
+.shortcut-recorder__clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.shortcut-recorder__clear:hover {
+  background: #f1f2f4;
+  color: var(--color-danger);
+}

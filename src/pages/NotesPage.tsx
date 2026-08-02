@@ -18,15 +18,10 @@ import { AccordionGroup } from "../features/groups/GroupTree";
 import type { AccordionNote } from "../features/groups/GroupTree";
 import type { GroupItem } from "../features/groups/types";
 import { NoteEditor } from "../features/notes/NoteEditor";
-import { loadState, saveStateDebounced, STORAGE_KEYS } from "../lib/storage";
-
-interface NoteItem {
-  content: string;
-  groupId: string | null;
-  id: string;
-  time: string;
-  title: string;
-}
+import type { NoteItem } from "../features/notes/types";
+import { useNoteTarget } from "../App";
+import { loadState, STORAGE_KEYS } from "../lib/storage";
+import { loadNotesData, isTauriRuntime, persistNotes } from "../lib/data";
 
 const initialNoteGroups: GroupItem[] = [
   { id: "work", name: "工作" },
@@ -163,6 +158,15 @@ export function NotesPage() {
   const [deletingGroup, setDeletingGroup] = useState<GroupItem | null>(null);
   const [isDeletingNote, setIsDeletingNote] = useState(false);
 
+  // 快捷搜索选中的目标笔记（来自 open-note 事件）：选中并展开全部分组保证可见
+  const { targetNoteId, consumeTarget } = useNoteTarget();
+  useEffect(() => {
+    if (!targetNoteId) return;
+    setActiveNoteId(targetNoteId);
+    setExpandedGroupId("__all__");
+    consumeTarget();
+  }, [consumeTarget, targetNoteId]);
+
   /** 仅按搜索词过滤（不按分组过滤，分组过滤由 AccordionGroup 内部处理） */
   const filteredNotes = useMemo(() => {
     const query = searchQuery.trim().toLocaleLowerCase();
@@ -216,14 +220,24 @@ export function NotesPage() {
     setActiveNoteId(note.id);
   };
 
-  /** 数据变更后防抖写入 localStorage（无保存按钮的自动持久化） */
+  /** 首次加载：Tauri 用 SQLite 数据覆盖初始值（含一次性迁移）；浏览器初始值即最终值 */
   useEffect(() => {
-    saveStateDebounced(STORAGE_KEYS.notes, notes);
-  }, [notes]);
+    if (!isTauriRuntime()) return;
+    let disposed = false;
+    void loadNotesData().then(({ notes: dbNotes, noteGroups: dbGroups }) => {
+      if (disposed) return;
+      setNotes(dbNotes);
+      setGroups(dbGroups);
+    });
+    return () => {
+      disposed = true;
+    };
+  }, []);
 
+  /** 数据变更后持久化（Tauri → SQLite 快照写；浏览器 → localStorage 防抖） */
   useEffect(() => {
-    saveStateDebounced(STORAGE_KEYS.noteGroups, groups);
-  }, [groups]);
+    persistNotes(notes, groups);
+  }, [notes, groups]);
 
   const handleToggleExpand = (groupId: string | null) => {
     setExpandedGroupId((prev) => (prev === groupId ? null : groupId));

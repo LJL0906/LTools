@@ -1,7 +1,15 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import App from "../App";
+import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
+import App, { NoteTargetContext } from "../App";
+import { NotesPage } from "./NotesPage";
+import type { AppOutletContext } from "../components/layout/AppShell";
+
+/** 模拟主窗口壳：为 NotesPage 提供 useOutletContext 的 searchQuery */
+function NotesShell() {
+  return <Outlet context={{ searchQuery: "" } satisfies AppOutletContext} />;
+}
 
 describe("notes static interactions", () => {
   beforeEach(() => {
@@ -103,5 +111,28 @@ describe("notes static interactions", () => {
     expect(document.querySelector(".ProseMirror")?.textContent).toContain(
       "记录接口排查过程",
     );
+  });
+});
+
+describe("notes quick-search target selection", () => {
+  it("selects the target note and expands all groups", async () => {
+    const consumeTarget = vi.fn();
+    render(
+      <MemoryRouter>
+        <NoteTargetContext.Provider
+          value={{ targetNoteId: "release-check", consumeTarget }}
+        >
+          <Routes>
+            <Route element={<NotesShell />}>
+              <Route path="/" element={<NotesPage />} />
+            </Route>
+          </Routes>
+        </NoteTargetContext.Provider>
+      </MemoryRouter>,
+    );
+
+    // 目标笔记（"发布检查清单"）被选中，编辑器标题显示它
+    expect(await screen.findByDisplayValue("发布检查清单")).toBeInTheDocument();
+    expect(consumeTarget).toHaveBeenCalledTimes(1);
   });
 });

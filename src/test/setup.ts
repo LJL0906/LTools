@@ -7,6 +7,12 @@ vi.mock("@tauri-apps/plugin-opener", () => ({
   openUrl: vi.fn(),
 }));
 
+// 剪切板模块依赖 Tauri 事件监听；jsdom 无 Tauri 运行时，
+// mock 返回可注销的 Promise，具体行为由各测试文件覆盖。
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(() => Promise.resolve(() => undefined)),
+}));
+
 if (!window.matchMedia) {
   Object.defineProperty(window, "matchMedia", {
     configurable: true,

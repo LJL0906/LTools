@@ -9,6 +9,8 @@ export const STORAGE_KEYS = {
   noteGroups: "ltools.noteGroups",
   links: "ltools.links",
   linkGroups: "ltools.linkGroups",
+  clipboardItems: "ltools.clipboardItems",
+  settings: "ltools.settings",
 } as const;
 
 export const SAVE_DEBOUNCE_MS = 200;

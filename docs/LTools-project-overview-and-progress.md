@@ -2,7 +2,7 @@
 
 - **项目名称：** LTools
 - **当前版本：** 0.1.0
-- **最后更新：** 2026-08-02
+- **最后更新：** 2026-08-03
 - **项目路径：** `D:\project\ljl\project\LTools`
 - **文档定位：** 项目基础信息、当前进度和后续任务的唯一非 UI 文档
 
@@ -16,8 +16,9 @@ LTools 是面向 Windows 10/11 的本地优先桌面效率工具，计划提供�
 |---|---|---|
 | 链接 | 静态交互已完成 | 搜索、分组筛选、新增、编辑、删除、复制反馈、localStorage 持久化 |
 | 笔记 | 静态交互已完成 | 搜索、分组筛选、新建、切换、标题与正文编辑、删除、Tiptap 富文本格式化、localStorage 持久化 |
-| 剪切板 | 未开发 | 当前仅有路由和空白占位页 |
-| 设置 | 未开发 | 当前仅有路由和空白占位页 |
+| 剪切板 | 已完成 | 系统剪贴板文本监听（Rust 轮询）、历史列表、复制回剪贴板、详情弹窗、删除、清空、搜索、SQLite 持久化 |
+| 设置 | 已完成（全部真实生效） | 开机自启、托盘×2、全局快捷键、快捷搜索窗口与快捷键、窗口宽高、数据库存储路径（真实控制 SQLite 位置）、备份导入导出、重启、检查更新（GitHub Releases）；设置存 SQLite `app_settings` 表 |
+| 数据层 | 已完成（SQLite） | 业务数据五表 + `app_settings` 表全量快照读写；localStorage 仅作浏览器降级与一次性迁移来源；数据库路径可配置 |
 | 快捷搜索面板 | 未开发 | 尚未创建独立 Tauri 窗口和快捷键行为 |
 
 ## 3. 技术栈
@@ -47,7 +48,7 @@ LTools 是面向 Windows 10/11 的本地优先桌面效率工具，计划提供�
 
 ### Rust 和 Tauri
 
-Rust 工程已经建立，依赖包含 `rusqlite`、`uuid`、`time`、`zip`、`image`、`sha2` 和 Windows API bindings。
+Rust 工程已经建立，依赖包含 `rusqlite`、`uuid`、`time`、`zip`、`image`、`sha2`、Windows API bindings 和 `arboard`（剪切板监听，已启用）。
 
 已注册的 Tauri 插件：
 
@@ -57,7 +58,7 @@ Rust 工程已经建立，依赖包含 `rusqlite`、`uuid`、`time`、`zip`、`i
 - dialog
 - opener
 
-当前只完成插件注册和基础窗口启动。SQLite 业务持久化、系统托盘、快捷键业务、剪切板监听、备份恢复等尚未实现。
+当前完成插件注册、基础窗口启动和系统剪贴板文本监听（`clipboard.rs` 轮询）。SQLite 业务持久化、系统托盘、快捷键业务、备份恢复等尚未实现。
 
 ## 4. 应用配置
 
@@ -140,7 +141,7 @@ UI 文档统一保存在：
 - React Router 四模块导航。
 - `AppShell`、`TopNavigation` 和 `ModuleLayout`。
 - `Button`、`IconButton`、`SearchBox`。
-- `Dialog` 和 `ConfirmDialog`。
+- `Dialog`（支持 `className` 定制容器样式）和 `ConfirmDialog`。
 - 公共分组选择器、菜单、新建、重命名和删除弹窗。
 - 公共颜色、圆角和间距 tokens。
 
@@ -152,6 +153,17 @@ UI 文档统一保存在：
 - 复制地址及“已复制”反馈。
 - 分组新建、重命名和删除基础交互。
 
+### 剪切板模块
+
+- 系统剪贴板文本监听：Rust 后台线程每 600ms 轮询剪贴板纯文本（`arboard`），与上次值不同时通过 `clipboard-changed` 事件推送给前端；首读仅作基线不推送，空白/非文本/锁定跳过。
+- 历史列表：文本内容 3 行预览（`pre-wrap` 保留换行）、相对时间（刚刚 / N 分钟前 / N 小时前 / 日期）、点击条目或复制按钮写回系统剪贴板（`navigator.clipboard.writeText`），带"已复制 / 复制失败"反馈。
+- 查看详情弹窗：展示完整文本（最长 10,000 字符）；弹窗整体限高 `min(78dvh, 520px)`，header/footer 固定、内容区弹性滚动（12.5px 字号、`pre-wrap` 保留换行），footer 一键复制并反馈状态。
+- 保留最新 30 条，超出裁剪最旧。
+- 去重：与最新一条相同则跳过（防监听循环）；同文本旧条目去重置顶。
+- 手动添加文本条目（Dialog + textarea）作为非 Tauri 环境的兜底入口。
+- 单条删除、清空全部均经 ConfirmDialog 确认；顶部搜索框复用公共搜索，内容匹配过滤；空状态复用公共 Empty 组件。
+- 数据存入 `ltools.clipboardItems`（localStorage 防抖持久化），单条文本截断到 10,000 字符防容量溢出。
+
 ### 笔记模块
 
 - 搜索标题和正文。
@@ -162,17 +174,33 @@ UI 文档统一保存在：
 - 筛选结果和右侧编辑器同步。
 - 删除所有笔记后保留侧栏和“暂无笔记”状态。
 
+### 设置模块与 SQLite 数据层（2026-08-03）
+
+- **SQLite 数据层**（`src-tauri/src/db.rs`）：五张业务表（links/link_groups/notes/note_groups/clipboard_items）+ `app_settings` 表；「全量快照」读写（`get_all_data` / `replace_all_data`，单事务）；默认库 `app_data_dir/ltools.db`。
+- **所有设置存 SQLite** `app_settings` 表（单行 JSON，`#[serde(default)]` 向前兼容）；旧版 `settings.json` 首次启动自动迁移；写入同步到「当前库 + 默认引导库」两份，`db_path` 作为引导指针。
+- **数据库存储路径真实生效**：设置目录 → `目录/ltools.db`；切换时自动迁移数据与设置；启动时从默认引导库读取 `db_path` 并切换到目标库。
+- **localStorage → SQLite 迁移**：前端 data 层首次检测到库空且有残留数据时自动一次性导入；浏览器 dev / 测试模式仍降级 localStorage。
+- 开机自启动：前端直接调 autostart 插件（`enable`/`disable`/`isEnabled`），失败回滚并提示。
+- 启动/关闭最小化到托盘：`tray-icon` feature + `TrayIconBuilder`（菜单：显示主窗口 / 退出，左键单击显示）；`on_window_event` 拦截 `CloseRequested`。
+- 全局快捷键 + 快捷搜索快捷键：Rust 侧 `on_shortcut` 注册，按下分别唤起主窗口 / 快捷搜索窗口。
+- 快捷搜索窗口：独立 `search` 窗口（560×440），复用前端入口按 label 路由 `/search`；全局搜索链接与笔记，点击链接打开浏览器。
+- 窗口宽高：≥640×400 校验，Rust 保存并即时应用，启动优先于默认布局。
+- 备份导入导出：zip 打包（`manifest.json`：format/version/exported_at/data）；导入校验后写回 SQLite（settings 走 set_settings）并刷新。
+- 重启应用：`restart_app` command。
+- **检查更新真实可用**：tauri-plugin-updater + GitHub Releases 端点 + 签名（密钥对 `.tauri/*.key`，私钥入 Secrets，发布流程见 `docs/RELEASE.md`）；有新版自动下载安装并重启。
+- 浏览器 dev 模式降级：非 Tauri 环境设置存 localStorage（`ltools.settings`），系统级按钮禁用。
+
 ## 9. 当前验证基线
 
 ```text
-Test Files  7 passed
-Tests      29 passed
+Test Files  13 passed
+Tests      72 passed
 pnpm build passed
 ```
 
-（2026-08-02 实测：`pnpm exec vitest run` 8 文件 / 29 用例全部通过，含侧栏拖拽、分组管理、链接与笔记 CRUD 交互、Tiptap 真实格式状态与切换同步、插入链接、localStorage 持久化读写、可访问性语义。浏览器实测：编辑/新建后刷新数据完整恢复。）
+（2026-08-03 实测：`pnpm exec vitest run` 13 文件 / 72 用例全部通过，含侧栏拖拽、分组管理、链接与笔记 CRUD 交互、Tiptap 格式状态、localStorage/SQLite 数据层双路径读写与迁移、剪切板监听与 30 条裁剪、设置页全部开关/校验/快捷键绑定(点击录入组合键)/备份导入导出、快捷搜索页。另 `cargo test`（db.rs 2 用例）、`cargo check`、`cargo build` 通过；真实应用冒烟启动正常，SQLite 落盘与 settings.json 迁移已验证。）
 
-该结果只代表当前前端静态交互和构建基线，不代表数据库、正式富文本或完整 Tauri 系统集成已经完成。
+该结果代表当前前端交互、数据层与系统级集成的验证基线；在线更新与安装包需首个 Release 后验证。
 
 ## 10. 当前公共能力与后续调整
 
@@ -214,24 +242,22 @@ pnpm build passed
 
 - 链接“打开”按钮的最终行为。
 - 笔记分组管理完整交互（拖拽排序等）。
-- 剪切板模块和设置模块。
-- 数据导入、导出和备份界面。
+- 快捷搜索窗口的笔记结果点击后导航到主窗口对应笔记（当前为关闭搜索窗口）。
 
 ### 数据层
 
-- SQLite 初始化和迁移（localStorage 为当前过渡方案，数据存于应用 WebView 本地）。
-- 链接、笔记、分组和设置持久化。
 - 图片与附件管理。
-- 备份和恢复。
+- 逐条 CRUD 命令（当前为全量快照写，数据量大后可优化）。
 
 ### Windows 集成
 
-- 系统托盘。
-- 全局快捷键业务。
-- 快捷搜索独立窗口。
-- 剪切板监听。
-- 开机启动设置界面。
-- 安装包和发布验证。
+- ~~系统托盘~~（2026-08-03 已实现）。
+- ~~全局快捷键业务~~（2026-08-03 已实现：唤起主窗口 + 快捷搜索窗口）。
+- ~~快捷搜索独立窗口~~（2026-08-03 已实现）。
+- ~~剪切板监听~~（2026-08-03 已实现文本轮询监听，图片/文件等非文本类型暂不支持）。
+- ~~开机启动设置界面~~（2026-08-03 已实现）。
+- ~~检查更新~~（2026-08-03 已接入 GitHub Releases updater）。
+- 安装包和首次发布验证（首个 Release 冒烟）。
 
 ## 12. 已知问题和待确认事项
 
@@ -242,22 +268,25 @@ pnpm build passed
 5. ~~当前数据均为 React 内存状态，刷新后恢复示例数据~~（2026-08-02 已接入 localStorage 防抖持久化 + 关闭兜底 flush）。
 6. 搜索状态下编辑内容可能使当前条目不再匹配并离开结果。
 7. 当前 UI 仍需继续复查字号、搜索框和控件密度；侧栏宽度已支持公共拖拽调整。
-8. capabilities 中 `global-shortcut:default` 实际授予 0 个命令（Tauri 默认策略：快捷键默认不开放），前端调用快捷键 `register`/`isRegistered` 会被拒绝；接入快捷键业务前需显式授予权限。
-9. Rust 侧 8 个预留依赖（rusqlite、uuid、time、thiserror、zip、image、sha2、windows）当前源码零引用，属“死依赖”，会拖慢编译与增大二进制；建议在真正接入对应功能时再启用。
+8. ~~capabilities 中 `global-shortcut:default` 实际授予 0 个命令~~（2026-08-03 全局快捷键已改为 Rust 侧注册，不经前端 IPC，无需前端权限；前端 `register`/`isRegistered` 调用仍会被拒绝，如未来改由前端注册需先补权限）。
+9. Rust 侧预留依赖（rusqlite、zip、image 等）已随功能启用；`uuid`、`time`、`thiserror`、`windows` 仍有部分零引用，建议在真正接入时再启用。
 10. `index.html` 的 `<title>` 与 `lang` 仍是脚手架默认（“Tauri + React + Typescript” / en），未随产品改名。
 11. 前端存在少量备用资产/死代码：`GroupSelector` 组件、shadcn 的 `dropdown-menu`/`field`/`separator`、sonner Toaster（已挂载但无调用点），接入后续功能时可复用或清理。
 12. Tiptap 已接入但有两项已知限制：jsdom 环境无法模拟 contenteditable 输入（格式化测试只验证状态与切换同步，真实输入需在 tauri dev 中冒烟）；链接/图片当前用 `window.prompt` 输入地址（原型方案，后续可换 Dialog）。
+13. 剪切板监听采用 600ms 轮询（`arboard`）：复制相同文本不会重复入库（去重置顶）；图片/文件等非文本类型暂不入库；浏览器 dev 模式无系统监听，依赖手动添加入口。
+14. 数据层为「全量快照写」（每次变更替换整个模块数据）：个人数据量级下性能无虞，但数据量增长后可改为逐条 CRUD。
+15. 更新机制已配置（GitHub Releases + 签名密钥），但尚未经过真实发布验证；首个 Release 需在仓库配置 `TAURI_SIGNING_PRIVATE_KEY` / `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` Secrets（见 `docs/RELEASE.md`）。
 
 ## 13. 推荐开发顺序
 
-1. 完成公共 UI 尺寸和间距统一。
-2. 补齐 Dialog、分组菜单和无行为按钮。
-3. ~~接入 Tiptap~~（2026-08-02 已完成）。
-4. 实现 SQLite 数据层和前后端命令边界。
-5. 完成链接和笔记 SQLite 持久化（自 localStorage 迁移）。
-6. 开发剪切板和设置模块。
-7. 完成托盘、快捷键和快捷搜索窗口。
-8. 执行 Windows 安装和发布验证。
+1. ~~接入 Tiptap~~（2026-08-02 已完成）。
+2. ~~设置模块（系统级）~~（2026-08-03 已完成：自启/托盘/快捷键/窗口/重启/备份导入导出/更新）。
+3. ~~SQLite 数据层 + 设置入库 + 数据库路径生效~~（2026-08-03 已完成）。
+4. ~~快捷搜索独立窗口~~（2026-08-03 已完成）。
+5. 执行首个 Windows 发布（配置 Secrets → 打 tag → 验证自动更新）。
+6. 数据层逐条 CRUD 优化（数据量增长后）。
+7. 快捷搜索笔记结果联动主窗口导航。
+8. 图片与附件管理。
 
 ## 14. 文档维护规则
 
