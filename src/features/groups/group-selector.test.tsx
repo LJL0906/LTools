@@ -12,7 +12,7 @@ describe("group accordion", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    expect(screen.getByTestId("module-sidebar")).toHaveStyle({ width: "260px" });
+    expect(screen.getByTestId("module-sidebar")).toHaveStyle({ width: "240px" });
     expect(screen.getByRole("searchbox", { name: "搜索笔记" })).toBeInTheDocument();
 
     // 所有笔记分组以扁平内联行展示
