@@ -49,12 +49,16 @@ if (!Element.prototype.scrollIntoView) {
 
 // jsdom 未实现 Text/Range 的 getClientRects；ProseMirror 的 scrollToSelection
 // （coordsAtPos → singleRect）会调用，缺失时异步抛出 TypeError。
-if (typeof Text.prototype.getClientRects !== "function") {
-  Text.prototype.getClientRects = () => [];
+// 注意：TS lib.dom 未声明 Text.getClientRects，需断言访问。
+const textPrototype = Text.prototype as unknown as {
+  getClientRects?: () => DOMRectList;
+};
+if (typeof textPrototype.getClientRects !== "function") {
+  textPrototype.getClientRects = () => [] as unknown as DOMRectList;
 }
 
 if (typeof Range.prototype.getClientRects !== "function") {
-  Range.prototype.getClientRects = () => [];
+  Range.prototype.getClientRects = () => [] as unknown as DOMRectList;
 }
 
 // jsdom 未实现 elementFromPoint / caretRangeFromPoint，ProseMirror 的点击命中检测

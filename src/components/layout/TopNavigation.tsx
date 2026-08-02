@@ -9,12 +9,14 @@ const modules = [
 ];
 
 interface TopNavigationProps {
+  compactSearch?: boolean;
   onSearchChange: (value: string) => void;
   searchPlaceholder?: string;
   searchValue: string;
 }
 
 export function TopNavigation({
+  compactSearch = false,
   onSearchChange,
   searchPlaceholder,
   searchValue,
@@ -38,7 +40,7 @@ export function TopNavigation({
       {searchPlaceholder ? (
         <SearchBox
           aria-label={searchPlaceholder}
-          className={searchPlaceholder === "搜索" ? "search-box--compact" : ""}
+          className={compactSearch ? "search-box--compact" : ""}
           onChange={(event) => onSearchChange(event.target.value)}
           placeholder={searchPlaceholder}
           value={searchValue}

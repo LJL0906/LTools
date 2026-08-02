@@ -137,7 +137,7 @@ describe("links static interactions", () => {
     });
     render(<App />);
 
-    const searchbox = screen.getByRole("searchbox", { name: "搜索" });
+    const searchbox = screen.getByRole("searchbox", { name: "搜索链接" });
     await user.type(searchbox, "不存在的链接");
 
     expect(screen.getByRole("status")).toHaveTextContent("没有找到匹配的链接");

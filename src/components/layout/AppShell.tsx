@@ -3,7 +3,7 @@ import { Outlet, useLocation } from "react-router-dom";
 import { TopNavigation } from "./TopNavigation";
 
 const searchPlaceholders: Record<string, string | undefined> = {
-  "/links": "搜索",
+  "/links": "搜索链接",
   "/notes": "搜索笔记",
   "/clipboard": "搜索剪切板",
 };
@@ -23,6 +23,7 @@ export function AppShell() {
   return (
     <div className="app-frame">
       <TopNavigation
+        compactSearch={pathname === "/links"}
         onSearchChange={setSearchQuery}
         searchPlaceholder={searchPlaceholders[pathname]}
         searchValue={searchQuery}
