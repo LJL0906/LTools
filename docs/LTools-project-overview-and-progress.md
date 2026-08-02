@@ -133,7 +133,7 @@ UI 文档统一保存在：
 - pnpm、Vitest、Testing Library 和 jsdom。
 - 主窗口尺寸、CSP 和基础 Tauri 插件配置。
 - 前端测试和生产构建流程。
-- localStorage 本地持久化（`src/lib/storage.ts`）：笔记、链接及各自分组变更后实时写入，刷新/重启后自动恢复，无保存按钮。
+- localStorage 本地持久化（`src/lib/storage.ts`）：笔记、链接及各自分组变更后 **200ms 防抖写入**，`beforeunload` / `visibilitychange(hidden)` / 组件卸载时强制 flush 兜底，刷新/重启后自动恢复，无保存按钮。
 
 ### 公共 UI
 
@@ -239,7 +239,7 @@ pnpm build passed
 2. 链接卡片是否展示备注摘要需要重新确认并同步 UI 原型。
 3. 笔记搜索匹配的是 HTML 正文，跨标签文本（如加粗分词）和标签噪声可能影响命中；当前示例数据均为单段落，暂可接受。
 4. 链接“打开”和笔记“管理分组”按钮仍缺少完整行为。
-5. ~~当前数据均为 React 内存状态，刷新后恢复示例数据~~（2026-08-02 已接入 localStorage 实时持久化）。
+5. ~~当前数据均为 React 内存状态，刷新后恢复示例数据~~（2026-08-02 已接入 localStorage 防抖持久化 + 关闭兜底 flush）。
 6. 搜索状态下编辑内容可能使当前条目不再匹配并离开结果。
 7. 当前 UI 仍需继续复查字号、搜索框和控件密度；侧栏宽度已支持公共拖拽调整。
 8. capabilities 中 `global-shortcut:default` 实际授予 0 个命令（Tauri 默认策略：快捷键默认不开放），前端调用快捷键 `register`/`isRegistered` 会被拒绝；接入快捷键业务前需显式授予权限。
@@ -254,7 +254,7 @@ pnpm build passed
 2. 补齐 Dialog、分组菜单和无行为按钮。
 3. ~~接入 Tiptap~~（2026-08-02 已完成）。
 4. 实现 SQLite 数据层和前后端命令边界。
-5. 完成链接和笔记持久化。
+5. 完成链接和笔记 SQLite 持久化（自 localStorage 迁移）。
 6. 开发剪切板和设置模块。
 7. 完成托盘、快捷键和快捷搜索窗口。
 8. 执行 Windows 安装和发布验证。
