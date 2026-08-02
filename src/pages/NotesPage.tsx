@@ -270,7 +270,7 @@ export function NotesPage() {
         minSidebarWidth={240}
         resizeHandleLabel="调整笔记侧栏宽度"
         sidebarStateKey="notes"
-        sidebarWidth={260}
+        sidebarWidth={240}
       >
         {activeNote ? (
           <article className="note-editor" aria-labelledby="note-title-heading">
