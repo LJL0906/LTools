@@ -18,7 +18,7 @@ import { AccordionGroup } from "../features/groups/GroupTree";
 import type { AccordionNote } from "../features/groups/GroupTree";
 import type { GroupItem } from "../features/groups/types";
 import { NoteEditor } from "../features/notes/NoteEditor";
-import { loadState, saveState, STORAGE_KEYS } from "../lib/storage";
+import { loadState, saveStateDebounced, STORAGE_KEYS } from "../lib/storage";
 
 interface NoteItem {
   content: string;
@@ -216,13 +216,13 @@ export function NotesPage() {
     setActiveNoteId(note.id);
   };
 
-  /** 数据变更后实时写入 localStorage（无保存按钮的自动持久化） */
+  /** 数据变更后防抖写入 localStorage（无保存按钮的自动持久化） */
   useEffect(() => {
-    saveState(STORAGE_KEYS.notes, notes);
+    saveStateDebounced(STORAGE_KEYS.notes, notes);
   }, [notes]);
 
   useEffect(() => {
-    saveState(STORAGE_KEYS.noteGroups, groups);
+    saveStateDebounced(STORAGE_KEYS.noteGroups, groups);
   }, [groups]);
 
   const handleToggleExpand = (groupId: string | null) => {

@@ -49,7 +49,7 @@ import {
   type LinkDraft,
   type LinkItem,
 } from "../features/links/types";
-import { loadState, saveState, STORAGE_KEYS } from "../lib/storage";
+import { loadState, saveStateDebounced, STORAGE_KEYS } from "../lib/storage";
 
 const initialLinks: LinkItem[] = [
   {
@@ -197,13 +197,13 @@ export function LinksPage({ searchQuery = "" }: LinksPageProps) {
   const [activeMenuLinkId, setActiveMenuLinkId] = useState<string | null>(null);
   const [menuPosition, setMenuPosition] = useState<{ top: number; right: number } | null>(null);
 
-  /** 数据变更后实时写入 localStorage（无保存按钮的自动持久化） */
+  /** 数据变更后防抖写入 localStorage（无保存按钮的自动持久化） */
   useEffect(() => {
-    saveState(STORAGE_KEYS.links, links);
+    saveStateDebounced(STORAGE_KEYS.links, links);
   }, [links]);
 
   useEffect(() => {
-    saveState(STORAGE_KEYS.linkGroups, groups);
+    saveStateDebounced(STORAGE_KEYS.linkGroups, groups);
   }, [groups]);
 
   useEffect(() => {

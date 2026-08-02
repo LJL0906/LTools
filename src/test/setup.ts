@@ -1,6 +1,7 @@
 ﻿import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
 import { afterEach, vi } from "vitest";
+import { cancelPendingSaves } from "../lib/storage";
 
 vi.mock("@tauri-apps/plugin-opener", () => ({
   openUrl: vi.fn(),
@@ -82,6 +83,8 @@ if (typeof document.caretRangeFromPoint !== "function") {
 
 afterEach(() => {
   cleanup();
+  // 取消未触发的防抖写入，避免 timer 在清理后落盘污染下一个测试
+  cancelPendingSaves();
   // 持久化数据在测试间共享，必须清理，否则影响"恢复默认数据"类断言
   localStorage.clear();
 });
