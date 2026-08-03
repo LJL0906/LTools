@@ -26,6 +26,7 @@ const EMPTY_DB = {
   notes: [],
   noteGroups: [],
   clipboardItems: [],
+  jsonTabs: [],
 };
 
 function mockSearchWindow(): void {

@@ -4,7 +4,9 @@ import { afterEach, vi } from "vitest";
 import { cancelPendingSaves } from "../lib/storage";
 
 vi.mock("@tauri-apps/plugin-opener", () => ({
-  openUrl: vi.fn(),
+  // 返回 resolved promise：与真实 openUrl 的 async 行为一致，
+  // 否则调用方 `openUrl(url).catch(...)` 会因 undefined 抛 TypeError
+  openUrl: vi.fn(() => Promise.resolve()),
 }));
 
 // 剪切板模块依赖 Tauri 事件监听；jsdom 无 Tauri 运行时，

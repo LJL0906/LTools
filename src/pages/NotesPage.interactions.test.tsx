@@ -152,6 +152,7 @@ describe("notes CRUD persistence (Tauri per-record commands)", () => {
       { id: "project-a", name: "项目 A" },
     ],
     clipboardItems: [],
+    jsonTabs: [],
   };
 
   function renderNotesPage() {

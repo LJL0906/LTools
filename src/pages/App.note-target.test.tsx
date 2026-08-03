@@ -18,6 +18,7 @@ const NOTES_DB = {
   ],
   noteGroups: [{ id: "work", name: "工作" }, { id: "project-a", name: "项目 A" }],
   clipboardItems: [],
+  jsonTabs: [],
 };
 
 describe("main window open-note integration", () => {

@@ -14,6 +14,8 @@ import {
   upsertClipboardItem,
   deleteClipboardItem,
   clearClipboardItems,
+  upsertJsonTab,
+  deleteJsonTab,
 } from "./data";
 import { STORAGE_KEYS, loadState } from "./storage";
 import type { LinkItem } from "../features/links/types";
@@ -34,6 +36,7 @@ const EMPTY_DB = {
   notes: [],
   noteGroups: [],
   clipboardItems: [],
+  jsonTabs: [],
 };
 
 function makeLink(overrides: Partial<LinkItem> = {}): LinkItem {
@@ -233,6 +236,28 @@ describe("per-item CRUD", () => {
     vi.useRealTimers();
   });
 
+  it("upserts and deletes a JSON tab in localStorage (browser fallback)", () => {
+    vi.useFakeTimers();
+    upsertJsonTab({ id: "j1", title: "页签", input: "{}", mode: "format" });
+    vi.advanceTimersByTime(250);
+    expect(loadState(STORAGE_KEYS.jsonTabs, [])).toEqual([
+      expect.objectContaining({ id: "j1", title: "页签", mode: "format" }),
+    ]);
+
+    // 同 id 覆盖更新
+    upsertJsonTab({ id: "j1", title: "改名", input: "[]", mode: "minify" });
+    vi.advanceTimersByTime(250);
+    expect(loadState(STORAGE_KEYS.jsonTabs, [])).toEqual([
+      expect.objectContaining({ id: "j1", title: "改名", mode: "minify" }),
+    ]);
+
+    // 删除
+    deleteJsonTab("j1");
+    vi.advanceTimersByTime(250);
+    expect(loadState(STORAGE_KEYS.jsonTabs, [])).toEqual([]);
+    vi.useRealTimers();
+  });
+
   it("dispatches per-item commands to SQLite in the Tauri runtime", () => {
     mockTauri();
     const link = makeLink({ id: "l1", title: "A" });
@@ -243,6 +268,8 @@ describe("per-item CRUD", () => {
     upsertClipboardItem({ id: "c1", text: "x", createdAt: 1 });
     deleteClipboardItem("c1");
     clearClipboardItems();
+    upsertJsonTab({ id: "j1", title: "格式化", input: "{}", mode: "format" });
+    deleteJsonTab("j1");
 
     expect(mockedInvoke).toHaveBeenCalledWith("upsert_link", { link });
     expect(mockedInvoke).toHaveBeenCalledWith("delete_link", { id: "l1" });
@@ -255,5 +282,9 @@ describe("per-item CRUD", () => {
     });
     expect(mockedInvoke).toHaveBeenCalledWith("delete_clipboard_item", { id: "c1" });
     expect(mockedInvoke).toHaveBeenCalledWith("clear_clipboard_items");
+    expect(mockedInvoke).toHaveBeenCalledWith("upsert_json_tab", {
+      tab: { id: "j1", title: "格式化", input: "{}", mode: "format" },
+    });
+    expect(mockedInvoke).toHaveBeenCalledWith("delete_json_tab", { id: "j1" });
   });
 });

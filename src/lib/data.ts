@@ -21,6 +21,14 @@ export function isTauriRuntime(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
+/** JSON 格式化页签（jsonTabs 数据项） */
+export interface JsonTabItem {
+  id: string;
+  title: string;
+  input: string;
+  mode: "format" | "minify";
+}
+
 /** 全量数据快照（与 Rust `AllData` 字段名一致） */
 export interface AllData {
   links: LinkItem[];
@@ -28,6 +36,8 @@ export interface AllData {
   notes: NoteItem[];
   noteGroups: GroupItem[];
   clipboardItems: ClipboardEntry[];
+  /** 与 Rust `AllData` 字段名一致 */
+  jsonTabs: JsonTabItem[];
 }
 
 const DATA_COMMANDS = {
@@ -42,6 +52,7 @@ function readAllFromLocalStorage(): AllData {
     notes: loadState<NoteItem[]>(STORAGE_KEYS.notes, []),
     noteGroups: loadState<GroupItem[]>(STORAGE_KEYS.noteGroups, []),
     clipboardItems: loadState<ClipboardEntry[]>(STORAGE_KEYS.clipboardItems, []),
+    jsonTabs: loadState<JsonTabItem[]>(STORAGE_KEYS.jsonTabs, []),
   };
 }
 
@@ -67,7 +78,8 @@ async function loadAllData(): Promise<AllData> {
     dbData.notes.length === 0 &&
     dbData.clipboardItems.length === 0 &&
     dbData.linkGroups.length === 0 &&
-    dbData.noteGroups.length === 0;
+    dbData.noteGroups.length === 0 &&
+    dbData.jsonTabs.length === 0;
 
   if (dbEmpty) {
     const local = readAllFromLocalStorage();
@@ -76,7 +88,8 @@ async function loadAllData(): Promise<AllData> {
       local.notes.length > 0 ||
       local.clipboardItems.length > 0 ||
       local.linkGroups.length > 0 ||
-      local.noteGroups.length > 0;
+      local.noteGroups.length > 0 ||
+      local.jsonTabs.length > 0;
     if (hasLocalData) {
       await replaceAll(local);
       return local;
@@ -181,6 +194,12 @@ export function persistClipboard(entries: ClipboardEntry[]): void {
   saveStateDebounced(STORAGE_KEYS.clipboardItems, entries);
 }
 
+/** 加载 JSON 格式化页签 */
+export async function loadToolsData(): Promise<JsonTabItem[]> {
+  const all = await loadAllData();
+  return all.jsonTabs;
+}
+
 /** 立即把 localStorage 数据写入 SQLite（迁移 / 测试辅助） */
 export function migrateToDb(): void {
   if (!isTauriRuntime()) return;
@@ -210,6 +229,7 @@ export function saveAllData(data: AllData): void {
   saveStateDebounced(STORAGE_KEYS.notes, data.notes);
   saveStateDebounced(STORAGE_KEYS.noteGroups, data.noteGroups);
   saveStateDebounced(STORAGE_KEYS.clipboardItems, data.clipboardItems);
+  saveStateDebounced(STORAGE_KEYS.jsonTabs, data.jsonTabs);
 }
 
 // ---------------------------------------------------------------------------
@@ -226,6 +246,8 @@ const CRUD_COMMANDS = {
   deleteNote: "delete_note",
   upsertNoteGroup: "upsert_note_group",
   deleteNoteGroup: "delete_note_group",
+  upsertJsonTab: "upsert_json_tab",
+  deleteJsonTab: "delete_json_tab",
   upsertClipboardItem: "upsert_clipboard_item",
   deleteClipboardItem: "delete_clipboard_item",
   clearClipboardItems: "clear_clipboard_items",
@@ -336,6 +358,30 @@ export function deleteNoteGroup(id: string): void {
     items.map((n) => (n.groupId === id ? { ...n, groupId: null } : n)),
   );
   mutateLocalArray<GroupItem>(STORAGE_KEYS.noteGroups, (items) => items.filter((g) => g.id !== id));
+}
+
+/** 新增 / 更新一个 JSON 格式化页签 */
+export function upsertJsonTab(tab: JsonTabItem): void {
+  if (isTauriRuntime()) {
+    void invoke(CRUD_COMMANDS.upsertJsonTab, { tab }).catch(() => undefined);
+    return;
+  }
+  mutateLocalArray<JsonTabItem>(STORAGE_KEYS.jsonTabs, (items) => {
+    const idx = items.findIndex((x) => x.id === tab.id);
+    if (idx === -1) return [...items, tab];
+    const next = [...items];
+    next[idx] = tab;
+    return next;
+  });
+}
+
+/** 删除一个 JSON 格式化页签 */
+export function deleteJsonTab(id: string): void {
+  if (isTauriRuntime()) {
+    void invoke(CRUD_COMMANDS.deleteJsonTab, { id }).catch(() => undefined);
+    return;
+  }
+  mutateLocalArray<JsonTabItem>(STORAGE_KEYS.jsonTabs, (items) => items.filter((x) => x.id !== id));
 }
 
 /** 新增 / 更新一条剪切板历史条目 */

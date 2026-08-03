@@ -39,6 +39,8 @@ pub struct AppSettings {
     pub backup_dir: Option<String>,
     /// 数据库存储目录（数据库文件为 `目录/ltools.db`），None 表示默认目录
     pub db_path: Option<String>,
+    /// 检查更新使用的代理地址（如 `http://127.0.0.1:7892`），None 表示不配置
+    pub update_proxy: Option<String>,
 }
 
 impl Default for AppSettings {
@@ -52,6 +54,7 @@ impl Default for AppSettings {
             quick_search_shortcut: None,
             backup_dir: None,
             db_path: None,
+            update_proxy: None,
         }
     }
 }
@@ -151,6 +154,27 @@ pub fn apply_global_shortcut(app: &AppHandle, settings: &AppSettings) -> Result<
     Ok(())
 }
 
+/// 创建快捷搜索窗口。
+/// `visible=false` 用于启动时预创建（后台完成前端加载，首次快捷键唤起秒开）；
+/// `visible=true` 用于懒创建兜底（预创建失败等情况下按快捷键时创建即显示）。
+pub fn create_search_window(
+    app: &AppHandle,
+    visible: bool,
+) -> tauri::Result<tauri::WebviewWindow> {
+    tauri::WebviewWindowBuilder::new(
+        app,
+        "search",
+        tauri::WebviewUrl::App("index.html".into()),
+    )
+    .title("LTools 快捷搜索")
+    .inner_size(560.0, 440.0)
+    .min_inner_size(560.0, 400.0)
+    .resizable(false)
+    .center()
+    .visible(visible)
+    .build()
+}
+
 /// 显示 / 隐藏快捷搜索窗口（快捷键显隐循环）。
 /// 窗口存在且可见 → 隐藏；不存在或已隐藏 → 显示（无则创建）并聚焦，
 /// 并通知前端聚焦输入框（每次显示都主动聚焦一次）。
@@ -165,17 +189,8 @@ pub fn toggle_quick_search(app: &AppHandle) {
         }
         return;
     }
-    let builder = tauri::WebviewWindowBuilder::new(
-        app,
-        "search",
-        tauri::WebviewUrl::App("index.html".into()),
-    )
-    .title("LTools 快捷搜索")
-    .inner_size(560.0, 440.0)
-    .min_inner_size(560.0, 400.0)
-    .resizable(false)
-    .center();
-    if let Err(e) = builder.build() {
+    // 兜底：窗口不存在（如预创建失败）时懒创建并直接显示
+    if let Err(e) = create_search_window(app, true) {
         eprintln!("创建快捷搜索窗口失败：{e}");
     }
 }

@@ -41,6 +41,8 @@ pub fn run() {
             db::upsert_clipboard_item,
             db::delete_clipboard_item,
             db::clear_clipboard_items,
+            db::upsert_json_tab,
+            db::delete_json_tab,
         ])
         .setup(|app| {
             // 初始化 SQLite 数据层：先打开默认引导库（设置存于其中）
@@ -71,6 +73,15 @@ pub fn run() {
                 // "启动最小化到托盘"开启时不显示主窗口
                 if !settings.minimize_to_tray {
                     let _ = window.show();
+                }
+            }
+
+            // 预创建快捷搜索窗口（隐藏）：后台完成前端加载，
+            // 首次按快捷键唤起时直接显示已就绪的界面（避免白屏等待）。
+            // 仅当设置中启用了快捷搜索快捷键时才常驻，避免无用开销。
+            if settings.quick_search_shortcut.is_some() {
+                if let Err(e) = settings::create_search_window(app.handle(), false) {
+                    eprintln!("预创建快捷搜索窗口失败：{e}");
                 }
             }
 

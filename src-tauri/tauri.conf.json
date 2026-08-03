@@ -45,7 +45,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEU1Mjg5RTYwOTVBOTc1RjEKUldUeGRhbVZZSjRvNWYwOTZGT3M5Y2FBLzZZanFoV0cxOGZDQkljS3BaRjZ1dHlqN0k3ci8xSloK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEU1NDZFMEY1M0I1MEU4QjEKUldTeDZGQTc5ZUJHNWR6MjhyM1E4VDhZYUdmUG1XanFaZXZRR2hHSVFJcEc2bnh1bFpQZVRkWTYK",
       "endpoints": [
         "https://github.com/LJL0906/LTools/releases/latest/download/latest.json"
       ]

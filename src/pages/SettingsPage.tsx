@@ -9,6 +9,7 @@ import {
   isEnabled as isAutostartEnabled,
 } from "@tauri-apps/plugin-autostart";
 import { Download, FolderOpen, RotateCcw, Upload } from "lucide-react";
+import { toast } from "sonner";
 import { Switch } from "@/components/shadcn/ui/switch";
 import { Button } from "../components/ui/Button";
 import {
@@ -22,6 +23,9 @@ import {
 import { loadState, saveState, STORAGE_KEYS } from "../lib/storage";
 import { getAllData, isTauriRuntime, saveAllData } from "../lib/data";
 import { ShortcutRecorder } from "../components/ui/ShortcutRecorder";
+
+/** 设置页反馈 toast 的固定 id：保证同时只显示一条（单例），新反馈直接替换旧反馈 */
+const SETTINGS_TOAST_ID = "settings-feedback";
 
 /** 设置行：label + 说明 + 控件 */
 function SettingsRow({
@@ -59,8 +63,7 @@ export function SettingsPage() {
   const [searchShortcutValue, setSearchShortcutValue] = useState<string | null>(null);
   const [appVersion, setAppVersion] = useState("0.1.0");
   const [checkingUpdate, setCheckingUpdate] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [updateProxyValue, setUpdateProxyValue] = useState("");
 
   /** 初始加载：设置 + 开机自启状态 + 版本号（非 Tauri 环境逐项降级） */
   useEffect(() => {
@@ -82,6 +85,7 @@ export function SettingsPage() {
       setHeightValue(resolved.window_height > 0 ? String(resolved.window_height) : "");
       setShortcutValue(resolved.global_shortcut);
       setSearchShortcutValue(resolved.quick_search_shortcut);
+      setUpdateProxyValue(resolved.update_proxy ?? "");
 
       try {
         const auto = await isAutostartEnabled();
@@ -104,31 +108,21 @@ export function SettingsPage() {
     };
   }, []);
 
-  /** 反馈提示自动消失 */
-  useEffect(() => {
-    if (!notice && !error) return;
-    const timer = window.setTimeout(() => {
-      setNotice(null);
-      setError(null);
-    }, 3000);
-    return () => window.clearTimeout(timer);
-  }, [notice, error]);
-
   /** 持久化设置：Tauri 环境写 settings.json（Rust 同时应用窗口尺寸/快捷键），否则 localStorage */
   const persist = async (next: AppSettings): Promise<boolean> => {
     setSettings(next);
     if (isTauriRuntime()) {
       try {
         await invoke(SETTINGS_COMMANDS.set, { settings: next });
-        setNotice("已保存");
+        toast.success("已保存", { id: SETTINGS_TOAST_ID });
         return true;
       } catch (e) {
-        setError(`保存失败：${String(e)}`);
+        toast.error(`保存失败：${String(e)}`, { id: SETTINGS_TOAST_ID });
         return false;
       }
     }
     saveState(STORAGE_KEYS.settings, next);
-    setNotice("已保存");
+    toast.success("已保存", { id: SETTINGS_TOAST_ID });
     return true;
   };
 
@@ -146,7 +140,7 @@ export function SettingsPage() {
       else await disableAutostart();
     } catch {
       setAutostartEnabled(!checked);
-      setError("开机自启设置失败（开发模式下可能不可用）");
+      toast.error("开机自启设置失败（开发模式下可能不可用）", { id: SETTINGS_TOAST_ID });
     }
   };
 
@@ -161,7 +155,7 @@ export function SettingsPage() {
       width < MIN_WINDOW_WIDTH ||
       height < MIN_WINDOW_HEIGHT
     ) {
-      setError(`窗口尺寸需为整数，且不小于 ${MIN_WINDOW_WIDTH}×${MIN_WINDOW_HEIGHT}`);
+      toast.error(`窗口尺寸需为整数，且不小于 ${MIN_WINDOW_WIDTH}×${MIN_WINDOW_HEIGHT}`, { id: SETTINGS_TOAST_ID });
       return;
     }
     await persist({ ...settings, window_width: width, window_height: height });
@@ -177,6 +171,19 @@ export function SettingsPage() {
   const saveSearchShortcut = async () => {
     if (!settings) return;
     await persist({ ...settings, quick_search_shortcut: searchShortcutValue });
+  };
+
+  /** 保存更新代理（空值 = 清除，恢复直连/系统代理） */
+  const saveUpdateProxy = async () => {
+    if (!settings) return;
+    const raw = updateProxyValue.trim();
+    if (raw && !/^https?:\/\/.+/.test(raw)) {
+      toast.error("代理地址需以 http:// 或 https:// 开头", { id: SETTINGS_TOAST_ID });
+      return;
+    }
+    const next = raw ? raw : null;
+    await persist({ ...settings, update_proxy: next });
+    setUpdateProxyValue(next ?? "");
   };
 
   /** 选择数据库存储目录并保存（SQLite 数据层迁移后生效） */
@@ -220,6 +227,7 @@ export function SettingsPage() {
       notes: all.notes,
       noteGroups: all.noteGroups,
       clipboardItems: all.clipboardItems,
+      jsonTabs: all.jsonTabs,
       settings,
     };
   };
@@ -241,9 +249,9 @@ export function SettingsPage() {
         path,
         data: await collectBackupData(),
       });
-      setNotice("备份已导出");
+      toast.success("备份已导出", { id: SETTINGS_TOAST_ID });
     } catch (e) {
-      setError(`导出失败：${String(e)}`);
+      toast.error(`导出失败：${String(e)}`, { id: SETTINGS_TOAST_ID });
     }
   };
 
@@ -268,6 +276,7 @@ export function SettingsPage() {
         clipboardItems: Array.isArray(data.clipboardItems)
           ? data.clipboardItems
           : [],
+        jsonTabs: Array.isArray(data.jsonTabs) ? data.jsonTabs : [],
       });
       // 设置一并写回（Tauri 走 set_settings，浏览器写 localStorage）
       if (data.settings && typeof data.settings === "object") {
@@ -279,7 +288,7 @@ export function SettingsPage() {
           saveState(STORAGE_KEYS.settings, data.settings);
         }
       }
-      setNotice("备份已导入，正在刷新…");
+      toast.success("备份已导入，正在刷新…", { id: SETTINGS_TOAST_ID });
       window.setTimeout(() => {
         try {
           window.location.reload();
@@ -288,33 +297,36 @@ export function SettingsPage() {
         }
       }, 300);
     } catch (e) {
-      setError(`导入失败：${String(e)}`);
+      toast.error(`导入失败：${String(e)}`, { id: SETTINGS_TOAST_ID });
     }
   };
 
   /** 重启应用（仅 Tauri 环境可用） */
   const restartApp = () => {
     if (!isTauriRuntime()) return;
-    void invoke(SETTINGS_COMMANDS.restart).catch(() => setError("重启失败"));
+    void invoke(SETTINGS_COMMANDS.restart).catch(() =>
+      toast.error("重启失败", { id: SETTINGS_TOAST_ID }),
+    );
   };
 
   /** 检查更新：查询 GitHub Releases 端点，有新版则下载安装并重启 */
   const checkForUpdates = async () => {
     if (!isTauriRuntime()) {
-      setError("检查更新仅在桌面应用中可用");
+      toast.error("检查更新仅在桌面应用中可用", { id: SETTINGS_TOAST_ID });
       return;
     }
     setCheckingUpdate(true);
-    setError(null);
     try {
-      const update = await check();
+      // 配置了更新代理则走代理检查（国内直连 GitHub 不稳定时用）；超时放宽到 30s
+      const proxy = settings?.update_proxy?.trim();
+      const update = await check(proxy ? { proxy, timeout: 30_000 } : { timeout: 30_000 });
       if (!update) {
-        setNotice(`已是最新版本（${appVersion}）`);
+        toast.success(`已是最新版本（${appVersion}）`, { id: SETTINGS_TOAST_ID });
         return;
       }
-      setNotice(`发现新版本 ${update.version}，正在下载并安装…`);
+      toast.success(`发现新版本 ${update.version}，正在下载并安装…`, { id: SETTINGS_TOAST_ID });
       await update.downloadAndInstall();
-      setNotice("更新完成，正在重启…");
+      toast.success("更新完成，正在重启…", { id: SETTINGS_TOAST_ID });
       window.setTimeout(() => {
         try {
           void invoke(SETTINGS_COMMANDS.restart);
@@ -323,7 +335,12 @@ export function SettingsPage() {
         }
       }, 500);
     } catch (e) {
-      setError(`检查更新失败：${String(e)}`);
+      const msg = String(e);
+      if (msg.includes("error sending request")) {
+        toast.error("检查更新失败：无法连接 GitHub，网络不稳定时可在「关于 → 更新代理」配置代理后重试", { id: SETTINGS_TOAST_ID });
+      } else {
+        toast.error(`检查更新失败：${msg}`, { id: SETTINGS_TOAST_ID });
+      }
     } finally {
       setCheckingUpdate(false);
     }
@@ -333,12 +350,6 @@ export function SettingsPage() {
 
   return (
     <section className="settings-page" aria-label="设置">
-      {(notice || error) ? (
-        <div aria-live="polite" className="settings-notice" role="status">
-          {error ?? notice}
-        </div>
-      ) : null}
-
       <section aria-labelledby="settings-general" className="settings-section">
         <h2 className="settings-section__title" id="settings-general">
           常规
@@ -548,6 +559,28 @@ export function SettingsPage() {
             >
               <Download aria-hidden="true" size={14} />
               {checkingUpdate ? "检查中…" : "检查更新"}
+            </Button>
+          </div>
+        </SettingsRow>
+        <SettingsRow
+          description="国内网络直连 GitHub 不稳定时，可填写本地代理地址（如 http://127.0.0.1:7892）；留空保存即恢复直连。"
+          label="更新代理"
+        >
+          <div className="settings-shortcut">
+            <input
+              aria-label="更新代理"
+              className="settings-shortcut__input"
+              onChange={(event) => setUpdateProxyValue(event.target.value)}
+              placeholder="http://127.0.0.1:7892"
+              spellCheck={false}
+              value={updateProxyValue}
+            />
+            <Button
+              disabled={settings === null}
+              onClick={() => void saveUpdateProxy()}
+              variant="primary"
+            >
+              保存
             </Button>
           </div>
         </SettingsRow>

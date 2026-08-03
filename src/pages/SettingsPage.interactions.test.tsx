@@ -8,6 +8,7 @@ import {
   enable,
   isEnabled,
 } from "@tauri-apps/plugin-autostart";
+import { check as checkForUpdate } from "@tauri-apps/plugin-updater";
 import App from "../App";
 import {
   DEFAULT_SETTINGS,
@@ -31,6 +32,12 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
 }));
+
+vi.mock("@tauri-apps/plugin-updater", () => ({
+  check: vi.fn(),
+}));
+
+const mockedCheck = vi.mocked(checkForUpdate);
 
 const mockedEnable = vi.mocked(enable);
 const mockedDisable = vi.mocked(disable);
@@ -337,6 +344,50 @@ describe("SettingsPage data settings (Tauri runtime)", () => {
           }),
         }),
       );
+    });
+  });
+
+  it("saves an update proxy address via set_settings", async () => {
+    const user = userEvent.setup();
+    mockTauriRuntime();
+    render(<App />);
+    await waitFor(() =>
+      expect(mockedInvoke).toHaveBeenCalledWith(SETTINGS_COMMANDS.get),
+    );
+
+    const input = await screen.findByLabelText("更新代理");
+    await user.type(input, "http://127.0.0.1:7892");
+    // 更新代理行的「保存」是页面第 3 个保存按钮（全局快捷键/快捷搜索/更新代理）
+    await user.click(screen.getAllByRole("button", { name: "保存" })[2]);
+
+    await waitFor(() => {
+      expect(mockedInvoke).toHaveBeenCalledWith(
+        SETTINGS_COMMANDS.set,
+        expect.objectContaining({
+          settings: expect.objectContaining({
+            update_proxy: "http://127.0.0.1:7892",
+          }),
+        }),
+      );
+    });
+  });
+
+  it("passes the configured proxy to the updater check", async () => {
+    const user = userEvent.setup();
+    mockTauriRuntime({ update_proxy: "http://127.0.0.1:7892" });
+    mockedCheck.mockResolvedValue(null);
+    render(<App />);
+    await waitFor(() =>
+      expect(mockedInvoke).toHaveBeenCalledWith(SETTINGS_COMMANDS.get),
+    );
+
+    await user.click(await screen.findByRole("button", { name: /检查更新/ }));
+
+    await waitFor(() => {
+      expect(mockedCheck).toHaveBeenCalledWith({
+        proxy: "http://127.0.0.1:7892",
+        timeout: 30000,
+      });
     });
   });
 });

@@ -10,7 +10,10 @@ export const STORAGE_KEYS = {
   links: "ltools.links",
   linkGroups: "ltools.linkGroups",
   clipboardItems: "ltools.clipboardItems",
+  jsonTabs: "ltools.jsonTabs",
   settings: "ltools.settings",
+  /** 快捷搜索面板最近打开的条目历史（最多 5 条） */
+  searchHistory: "ltools.searchHistory",
 } as const;
 
 export const SAVE_DEBOUNCE_MS = 200;

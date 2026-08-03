@@ -21,6 +21,8 @@ export interface AppSettings {
   backup_dir: string | null;
   /** 数据库存储路径（SQLite 数据层迁移后生效） */
   db_path: string | null;
+  /** 更新代理地址（如 http://127.0.0.1:7892），null 表示不配置（走系统代理/直连） */
+  update_proxy: string | null;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -32,6 +34,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   quick_search_shortcut: null,
   backup_dir: null,
   db_path: null,
+  update_proxy: null,
 };
 
 /** 前端调用的 Tauri command 名 */
@@ -50,6 +53,7 @@ export interface BackupData {
   notes?: import("../notes/types").NoteItem[];
   noteGroups?: import("../groups/types").GroupItem[];
   clipboardItems?: import("../clipboard/types").ClipboardEntry[];
+  jsonTabs?: import("../../lib/data").JsonTabItem[];
   settings?: unknown;
 }
 

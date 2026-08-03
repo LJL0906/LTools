@@ -9,6 +9,7 @@ import { isTauriRuntime } from "../lib/data";
 import type { LinkItem } from "../features/links/types";
 import type { NoteItem } from "../features/notes/types";
 import { getLinkUrl } from "../features/links/types";
+import { loadState, saveState, STORAGE_KEYS } from "../lib/storage";
 
 interface SearchResult {
   kind: "link" | "note";
@@ -18,6 +19,9 @@ interface SearchResult {
   /** 链接的完整 URL（仅 link 类型） */
   url?: string;
 }
+
+/** 最近打开的历史条目数量上限 */
+const MAX_HISTORY = 5;
 
 /** 无本地结果时用百度搜索关键词（打开系统默认浏览器） */
 const BAIDU_SEARCH_URL = "https://www.baidu.com/s";
@@ -31,9 +35,18 @@ export function QuickSearchPage() {
   const [links, setLinks] = useState<LinkItem[]>([]);
   const [notes, setNotes] = useState<NoteItem[]>([]);
   const [loaded, setLoaded] = useState(false);
+  // 最近打开的历史条目（空输入时展示；持久化到 localStorage）
+  const [history, setHistory] = useState<SearchResult[]>(() =>
+    loadState<SearchResult[]>(STORAGE_KEYS.searchHistory, []),
+  );
   // 键盘上下选择的条目索引（0 起；列表末尾为百度搜索兜底条目）
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // 历史变更时持久化（打开条目是低频操作，直接同步写入）
+  useEffect(() => {
+    saveState(STORAGE_KEYS.searchHistory, history);
+  }, [history]);
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
@@ -58,6 +71,8 @@ export function QuickSearchPage() {
       void getCurrentWebviewWindow()
         .onFocusChanged(({ payload: focused }) => {
           if (focused) {
+            // 每次唤起都视为全新搜索：清空输入，回到「最近使用」历史列表
+            setQuery("");
             inputRef.current?.focus();
           }
         })
@@ -83,6 +98,8 @@ export function QuickSearchPage() {
     let unlisten: UnlistenFn | undefined;
     let disposed = false;
     void listen<null>("quick-search-shown", () => {
+      // 每次窗口显示都清空输入并聚焦，展示「最近使用」历史
+      setQuery("");
       inputRef.current?.focus();
     })
       .then((fn) => {
@@ -137,16 +154,28 @@ export function QuickSearchPage() {
   // 无本地结果时的百度搜索兜底条目（仅 query 非空且无结果时显示）
   const baiduQuery = query.trim();
   const showBaiduItem = baiduQuery !== "" && results.length === 0;
-  // 键盘导航条目总数 = 本地结果 + 百度兜底
-  const totalItems = results.length + (showBaiduItem ? 1 : 0);
+  // 展示列表：输入为空 → 最近历史；输入非空 → 搜索结果
+  const isEmptyQuery = baiduQuery === "";
+  const displayItems = isEmptyQuery ? history : results;
+  // 键盘导航条目总数 = 展示列表 + 百度兜底
+  const totalItems = displayItems.length + (showBaiduItem ? 1 : 0);
 
   // 输入变化时重置选中到第一项
   useEffect(() => {
     setActiveIndex(0);
   }, [query]);
 
+  /** 记录一条打开历史：去重置顶，只保留最新 MAX_HISTORY 条 */
+  const recordHistory = (result: SearchResult) => {
+    setHistory((prev) => [
+      result,
+      ...prev.filter((h) => !(h.kind === result.kind && h.id === result.id)),
+    ].slice(0, MAX_HISTORY));
+  };
+
   /** 打开本地结果（链接走系统浏览器 / 笔记唤起主窗口） */
   const openResult = (result: SearchResult) => {
+    recordHistory(result);
     if (result.kind === "link" && result.url) {
       // 链接：直接用系统默认浏览器打开
       void openUrl(result.url).catch(() => undefined);
@@ -160,8 +189,8 @@ export function QuickSearchPage() {
   const openActive = () => {
     if (totalItems === 0) return;
     const idx = Math.min(activeIndex, totalItems - 1);
-    if (idx < results.length) {
-      openResult(results[idx]);
+    if (idx < displayItems.length) {
+      openResult(displayItems[idx]);
     } else if (showBaiduItem) {
       const url = `${BAIDU_SEARCH_URL}?wd=${encodeURIComponent(baiduQuery)}`;
       void openUrl(url).catch(() => undefined);
@@ -197,7 +226,29 @@ export function QuickSearchPage() {
     };
     window.addEventListener("keydown", onWindowKeyDown);
     return () => window.removeEventListener("keydown", onWindowKeyDown);
-  }, [activeIndex, baiduQuery, results, showBaiduItem, totalItems]);
+  }, [activeIndex, baiduQuery, displayItems, showBaiduItem, totalItems]);
+
+  /** 渲染单个条目（历史与搜索结果共用，badge 区分链接/笔记） */
+  const renderResultItem = (result: SearchResult, index: number) => (
+    <li key={`${result.kind}-${result.id}`}>
+      <button
+        aria-selected={index === activeIndex}
+        className={`quick-search__item${index === activeIndex ? " quick-search__item--active" : ""}`}
+        onClick={() => openResult(result)}
+        onMouseEnter={() => setActiveIndex(index)}
+        role="option"
+        type="button"
+      >
+        <span className={`quick-search__badge quick-search__badge--${result.kind}`}>
+          {result.kind === "link" ? "链接" : "笔记"}
+        </span>
+        <span className="quick-search__item-body">
+          <span className="quick-search__item-title">{result.title}</span>
+          <span className="quick-search__item-subtitle">{result.subtitle}</span>
+        </span>
+      </button>
+    </li>
+  );
 
   return (
     <div className="quick-search">
@@ -216,8 +267,17 @@ export function QuickSearchPage() {
         <kbd className="quick-search__hint">Esc 关闭</kbd>
       </div>
 
-      {query.trim() === "" ? (
-        <div className="quick-search__placeholder">输入关键词开始搜索链接与笔记</div>
+      {isEmptyQuery ? (
+        history.length > 0 ? (
+          <>
+            <div className="quick-search__section-title">最近使用</div>
+            <ul className="quick-search__list" role="listbox" aria-label="最近使用">
+              {history.map(renderResultItem)}
+            </ul>
+          </>
+        ) : (
+          <div className="quick-search__placeholder">输入关键词开始搜索链接与笔记</div>
+        )
       ) : totalItems === 0 ? (
         <div className="quick-search__placeholder">
           <SearchX aria-hidden="true" size={18} />
@@ -225,26 +285,7 @@ export function QuickSearchPage() {
         </div>
       ) : (
         <ul className="quick-search__list" role="listbox" aria-label="搜索结果">
-          {results.map((result, index) => (
-            <li key={`${result.kind}-${result.id}`}>
-              <button
-                aria-selected={index === activeIndex}
-                className={`quick-search__item${index === activeIndex ? " quick-search__item--active" : ""}`}
-                onClick={() => openResult(result)}
-                onMouseEnter={() => setActiveIndex(index)}
-                role="option"
-                type="button"
-              >
-                <span className={`quick-search__badge quick-search__badge--${result.kind}`}>
-                  {result.kind === "link" ? "链接" : "笔记"}
-                </span>
-                <span className="quick-search__item-body">
-                  <span className="quick-search__item-title">{result.title}</span>
-                  <span className="quick-search__item-subtitle">{result.subtitle}</span>
-                </span>
-              </button>
-            </li>
-          ))}
+          {results.map(renderResultItem)}
           {showBaiduItem && (
             <li>
               <button

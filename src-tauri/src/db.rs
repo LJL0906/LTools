@@ -61,6 +61,14 @@ pub struct ClipboardItem {
     pub created_at: i64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JsonTabItem {
+    pub id: String,
+    pub title: String,
+    pub input: String,
+    pub mode: String,
+}
+
 /// 全量数据快照（前端 ↔ Rust 传输）。
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AllData {
@@ -72,6 +80,8 @@ pub struct AllData {
     pub note_groups: Vec<GroupItem>,
     #[serde(rename = "clipboardItems")]
     pub clipboard_items: Vec<ClipboardItem>,
+    #[serde(rename = "jsonTabs")]
+    pub json_tabs: Vec<JsonTabItem>,
 }
 
 // ---------------------------------------------------------------------------
@@ -131,6 +141,12 @@ CREATE TABLE IF NOT EXISTS clipboard_items (
   id         TEXT PRIMARY KEY,
   text       TEXT NOT NULL,
   created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS json_tabs (
+  id    TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  input TEXT NOT NULL DEFAULT '',
+  mode  TEXT NOT NULL DEFAULT 'format'
 );
 CREATE TABLE IF NOT EXISTS app_settings (
   key   TEXT PRIMARY KEY,
@@ -279,12 +295,30 @@ fn read_all(tx: &Transaction) -> Result<AllData, String> {
         });
     }
 
+    let mut stmt = tx
+        .prepare("SELECT id, title, input, mode FROM json_tabs ORDER BY rowid")
+        .map_err(|e| e.to_string())?;
+    let json_tabs = stmt
+        .query_map([], |row| {
+            Ok(JsonTabItem {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                input: row.get(2)?,
+                mode: row.get(3)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    drop(stmt);
+
     Ok(AllData {
         links,
         link_groups,
         notes,
         note_groups,
         clipboard_items: clipboard,
+        json_tabs,
     })
 }
 
@@ -297,6 +331,7 @@ fn write_all(tx: &Transaction, data: &AllData) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     tx.execute("DELETE FROM clipboard_items", [])
         .map_err(|e| e.to_string())?;
+    tx.execute("DELETE FROM json_tabs", []).map_err(|e| e.to_string())?;
 
     for g in &data.link_groups {
         tx.execute("INSERT OR REPLACE INTO link_groups (id, name) VALUES (?1, ?2)", params![g.id, g.name])
@@ -324,6 +359,13 @@ fn write_all(tx: &Transaction, data: &AllData) -> Result<(), String> {
         tx.execute(
             "INSERT OR REPLACE INTO clipboard_items (id, text, created_at) VALUES (?1, ?2, ?3)",
             params![c.id, c.text, c.created_at],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    for j in &data.json_tabs {
+        tx.execute(
+            "INSERT OR REPLACE INTO json_tabs (id, title, input, mode) VALUES (?1, ?2, ?3, ?4)",
+            params![j.id, j.title, j.input, j.mode],
         )
         .map_err(|e| e.to_string())?;
     }
@@ -454,6 +496,21 @@ fn clear_clipboard_items_row(conn: &Connection) -> Result<(), String> {
     Ok(())
 }
 
+fn upsert_json_tab_row(conn: &Connection, tab: &JsonTabItem) -> Result<(), String> {
+    conn.execute(
+        "INSERT OR REPLACE INTO json_tabs (id, title, input, mode) VALUES (?1, ?2, ?3, ?4)",
+        params![tab.id, tab.title, tab.input, tab.mode],
+    )
+    .map_err(|e| format!("写入 JSON 页签失败：{e}"))?;
+    Ok(())
+}
+
+fn delete_json_tab_row(conn: &Connection, id: &str) -> Result<(), String> {
+    conn.execute("DELETE FROM json_tabs WHERE id = ?1", params![id])
+        .map_err(|e| format!("删除 JSON 页签失败：{e}"))?;
+    Ok(())
+}
+
 /// 新增 / 更新一条链接。
 #[tauri::command]
 pub fn upsert_link(state: State<'_, DbState>, link: LinkItem) -> Result<(), String> {
@@ -520,6 +577,18 @@ pub fn clear_clipboard_items(state: State<'_, DbState>) -> Result<(), String> {
     clear_clipboard_items_row(&state.conn.lock().unwrap())
 }
 
+/// 新增 / 更新一个 JSON 格式化页签。
+#[tauri::command]
+pub fn upsert_json_tab(state: State<'_, DbState>, tab: JsonTabItem) -> Result<(), String> {
+    upsert_json_tab_row(&state.conn.lock().unwrap(), &tab)
+}
+
+/// 删除一个 JSON 格式化页签。
+#[tauri::command]
+pub fn delete_json_tab(state: State<'_, DbState>, id: String) -> Result<(), String> {
+    delete_json_tab_row(&state.conn.lock().unwrap(), &id)
+}
+
 // ---------------------------------------------------------------------------
 // 数据库路径切换（设置变更时迁移数据）
 // ---------------------------------------------------------------------------
@@ -549,6 +618,7 @@ pub fn switch_db(app: &AppHandle, old: &DbState, new_path: &PathBuf) -> Result<(
         if new_data.links.is_empty()
             && new_data.notes.is_empty()
             && new_data.clipboard_items.is_empty()
+            && new_data.json_tabs.is_empty()
         {
             write_all(&tx, &old_data)?;
         }
@@ -607,6 +677,12 @@ mod tests {
                 text: "剪贴板内容".into(),
                 created_at: 1_700_000_000,
             }],
+            json_tabs: vec![JsonTabItem {
+                id: "j1".into(),
+                title: "格式化".into(),
+                input: "{\"a\":1}".into(),
+                mode: "format".into(),
+            }],
         }
     }
 
@@ -639,6 +715,9 @@ mod tests {
         assert_eq!(got.notes[0].content, "<p>内容</p>");
         assert_eq!(got.clipboard_items.len(), 1);
         assert_eq!(got.clipboard_items[0].created_at, 1_700_000_000);
+        assert_eq!(got.json_tabs.len(), 1);
+        assert_eq!(got.json_tabs[0].title, "格式化");
+        assert_eq!(got.json_tabs[0].mode, "format");
     }
 
     #[test]
@@ -683,6 +762,7 @@ mod tests {
         assert_eq!(got.notes.len(), 0);
         assert_eq!(got.clipboard_items.len(), 0);
         assert_eq!(got.link_groups.len(), 0);
+        assert_eq!(got.json_tabs.len(), 0);
     }
 
     // ---- 逐条 CRUD ----
@@ -835,6 +915,70 @@ mod tests {
             let got = read_all(&tx).unwrap();
             tx.commit().unwrap();
             assert_eq!(got.clipboard_items.len(), 0);
+        }
+    }
+
+    #[test]
+    fn json_tab_inserts_updates_and_deletes_single_row() {
+        let state = memory_db();
+        let tab = JsonTabItem {
+            id: "j1".into(),
+            title: "格式化".into(),
+            input: "{\"a\":1}".into(),
+            mode: "format".into(),
+        };
+        {
+            let conn = state.conn.lock().unwrap();
+            upsert_json_tab_row(&conn, &tab).unwrap();
+        }
+
+        // 新增后可读
+        {
+            let mut conn = state.conn.lock().unwrap();
+            let tx = conn.transaction().unwrap();
+            let got = read_all(&tx).unwrap();
+            tx.commit().unwrap();
+            assert_eq!(got.json_tabs.len(), 1);
+            assert_eq!(got.json_tabs[0].title, "格式化");
+            assert_eq!(got.json_tabs[0].input, "{\"a\":1}");
+            assert_eq!(got.json_tabs[0].mode, "format");
+        }
+
+        // 同 id 覆盖更新（title/input/mode 变化，行数不变）
+        {
+            let conn = state.conn.lock().unwrap();
+            upsert_json_tab_row(
+                &conn,
+                &JsonTabItem {
+                    title: "压缩".into(),
+                    input: "{\"b\":2}".into(),
+                    mode: "minify".into(),
+                    ..tab.clone()
+                },
+            )
+            .unwrap();
+        }
+        {
+            let mut conn = state.conn.lock().unwrap();
+            let tx = conn.transaction().unwrap();
+            let got = read_all(&tx).unwrap();
+            tx.commit().unwrap();
+            assert_eq!(got.json_tabs.len(), 1);
+            assert_eq!(got.json_tabs[0].title, "压缩");
+            assert_eq!(got.json_tabs[0].mode, "minify");
+        }
+
+        // 删除后为空
+        {
+            let conn = state.conn.lock().unwrap();
+            delete_json_tab_row(&conn, "j1").unwrap();
+        }
+        {
+            let mut conn = state.conn.lock().unwrap();
+            let tx = conn.transaction().unwrap();
+            let got = read_all(&tx).unwrap();
+            tx.commit().unwrap();
+            assert_eq!(got.json_tabs.len(), 0);
         }
     }
 }

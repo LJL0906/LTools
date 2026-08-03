@@ -146,7 +146,7 @@ function App() {
       </BrowserRouter>
       {/* 通知仅主窗口渲染（快捷搜索窗口保持干净） */}
       {!isSearchWindow() ? (
-        <Toaster closeButton position="bottom-right" richColors />
+        <Toaster closeButton position="top-center" richColors />
       ) : null}
     </TooltipProvider>
   );

@@ -272,6 +272,7 @@ describe("ClipboardPage interactions", () => {
           notes: [],
           noteGroups: [],
           clipboardItems: [],
+          jsonTabs: [],
         });
       }
       return Promise.resolve(undefined);
@@ -341,6 +342,7 @@ describe("ClipboardPage interactions", () => {
           notes: [],
           noteGroups: [],
           clipboardItems: [],
+          jsonTabs: [],
         });
       }
       return Promise.resolve(undefined);

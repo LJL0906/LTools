@@ -12,6 +12,7 @@ import {
   SearchX,
   Trash2,
 } from "lucide-react";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { AppOutletContext } from "../components/layout/AppShell";
 import { ModuleLayout } from "../components/layout/ModuleLayout";
@@ -188,6 +189,9 @@ interface LinksPageProps {
 }
 
 export function LinksPage({ searchQuery = "" }: LinksPageProps) {
+  // 首屏 loading 态：仅 Tauri 环境启用（SQLite 数据异步到达前不渲染示例数据，
+  // 避免内容闪现跳变）；浏览器 dev/测试环境同步有数据，保持原有行为。
+  const [loading, setLoading] = useState(() => isTauriRuntime());
   const [groups, setGroups] = useState(() =>
     loadState(STORAGE_KEYS.linkGroups, initialGroups),
   );
@@ -213,6 +217,7 @@ export function LinksPage({ searchQuery = "" }: LinksPageProps) {
       if (disposed) return;
       setLinks(dbLinks);
       setGroups(dbGroups);
+      setLoading(false);
     });
     return () => {
       disposed = true;
@@ -324,14 +329,21 @@ export function LinksPage({ searchQuery = "" }: LinksPageProps) {
           sidebarWidth={216}
         >
           <section className="links-content">
-            <CompatButton
-              className="button button--primary links-primary-button"
-              onClick={() => setIsAddingLink(true)}
-            >
-              <FolderPlus size={15} aria-hidden="true" />
-              添加链接
-            </CompatButton>
-            {filteredLinks.length > 0 ? (
+            {loading ? (
+              <div className="links-page__loading" role="status">
+                <span className="links-page__spinner" aria-hidden="true" />
+                <span>加载中…</span>
+              </div>
+            ) : (
+              <>
+                <CompatButton
+                  className="button button--primary links-primary-button"
+                  onClick={() => setIsAddingLink(true)}
+                >
+                  <FolderPlus size={15} aria-hidden="true" />
+                  添加链接
+                </CompatButton>
+                {filteredLinks.length > 0 ? (
               <div className="link-grid">
                 {filteredLinks.map((link) => {
                   const groupName =
@@ -461,7 +473,21 @@ export function LinksPage({ searchQuery = "" }: LinksPageProps) {
                             aria-label={`打开 ${link.title}`}
                             size="icon-sm"
                             variant="default"
-                            onClick={() => openUrl(getLinkUrl(link))}
+                            onClick={() => {
+                              // 打开系统浏览器后主动隐藏主窗口（打开失败则留在原地可重试）
+                              void openUrl(getLinkUrl(link))
+                                .then(() => {
+                                  try {
+                                    // 打开成功后隐藏主窗口（需 core:window:allow-hide 权限）
+                                    void getCurrentWebviewWindow()
+                                      .hide()
+                                      .catch(() => undefined);
+                                  } catch {
+                                    // 非 Tauri 环境（浏览器 dev / 测试）静默降级
+                                  }
+                                })
+                                .catch(() => undefined); // 打开失败静默（留在窗口内可重试）
+                            }}
                           >
                             <ExternalLink size={14} aria-hidden="true" />
                           </ShadcnButton>
@@ -493,7 +519,9 @@ export function LinksPage({ searchQuery = "" }: LinksPageProps) {
                       : "添加一个链接，方便之后快速访问。"}
                   </EmptyDescription>
                 </EmptyHeader>
-              </Empty>
+                </Empty>
+              )}
+              </>
             )}
           </section>
         </ModuleLayout>

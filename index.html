@@ -5,10 +5,57 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>LTools</title>
+    <style>
+      /* 启动进度占位：仅在 React 挂载前显示，挂载瞬间被 #root 内容整体替换。
+         纯内联 CSS，不依赖任何外部资源，保证首屏加载期间始终有加载动画。 */
+      .ltools-boot {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        background: #f6f7f9;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      }
+      .ltools-boot__spinner {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        border: 3px solid rgba(49, 116, 223, 0.2);
+        border-top-color: #3174df;
+        animation: ltools-boot-spin 0.9s linear infinite;
+      }
+      .ltools-boot__title {
+        font-size: 14px;
+        font-weight: 500;
+        letter-spacing: 0.02em;
+        color: #6f7780;
+      }
+      @keyframes ltools-boot-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      @media (prefers-color-scheme: dark) {
+        .ltools-boot {
+          background: #1c1c1f;
+        }
+        .ltools-boot__title {
+          color: #8a9098;
+        }
+      }
+    </style>
   </head>
 
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="ltools-boot" role="status" aria-label="正在加载 LTools">
+        <div class="ltools-boot__spinner" aria-hidden="true"></div>
+        <div class="ltools-boot__title">LTools</div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
