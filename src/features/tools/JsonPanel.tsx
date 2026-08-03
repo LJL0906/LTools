@@ -1,13 +1,9 @@
 import { useEffect, useState } from "react";
 
-/** JSON 子功能模式 */
-export type JsonMode = "format" | "minify" | "validate";
+const PROCESS_DEBOUNCE_MS = 300;
 
-interface JsonPanelProps {
-  mode: JsonMode;
-}
-
-const FORMAT_DEBOUNCE_MS = 300;
+/** 预览模式：格式化（美化）或压缩（单行） */
+type ViewMode = "format" | "minify";
 
 interface JsonResult {
   ok: boolean;
@@ -16,17 +12,17 @@ interface JsonResult {
 }
 
 /**
- * JSON 工具面板：输入后防抖自动处理。
- * - format：美化缩进
- * - minify：压缩为单行
- * - validate：仅校验合法性
+ * JSON 格式化工具：左右布局（输入 | 预览）。
+ * - 输入防抖自动处理（按当前模式：美化或压缩）
+ * - 操作按钮：格式化 / 压缩（切换预览模式）、一键复制、一键清空
  */
-export function JsonPanel({ mode }: JsonPanelProps) {
+export function JsonPanel() {
   const [input, setInput] = useState("");
+  const [mode, setMode] = useState<ViewMode>("format");
   const [result, setResult] = useState<JsonResult>({ ok: true, text: "", error: "" });
   const [copied, setCopied] = useState(false);
 
-  // 输入防抖：停止输入 300ms 后自动格式化/校验
+  // 输入或模式变化后防抖处理
   useEffect(() => {
     const timer = window.setTimeout(() => {
       const raw = input.trim();
@@ -36,13 +32,14 @@ export function JsonPanel({ mode }: JsonPanelProps) {
       }
       try {
         const parsed = JSON.parse(raw);
-        if (mode === "format") {
-          setResult({ ok: true, text: JSON.stringify(parsed, null, 2), error: "" });
-        } else if (mode === "minify") {
-          setResult({ ok: true, text: JSON.stringify(parsed), error: "" });
-        } else {
-          setResult({ ok: true, text: "✅ JSON 合法", error: "" });
-        }
+        setResult({
+          ok: true,
+          text:
+            mode === "format"
+              ? JSON.stringify(parsed, null, 2)
+              : JSON.stringify(parsed),
+          error: "",
+        });
       } catch (e) {
         setResult({
           ok: false,
@@ -50,7 +47,7 @@ export function JsonPanel({ mode }: JsonPanelProps) {
           error: e instanceof Error ? e.message : String(e),
         });
       }
-    }, FORMAT_DEBOUNCE_MS);
+    }, PROCESS_DEBOUNCE_MS);
     return () => window.clearTimeout(timer);
   }, [input, mode]);
 
@@ -64,37 +61,67 @@ export function JsonPanel({ mode }: JsonPanelProps) {
     }
   };
 
-  const modeLabel =
-    mode === "format" ? "格式化" : mode === "minify" ? "压缩" : "校验";
+  const clearAll = () => {
+    setInput("");
+    setResult({ ok: true, text: "", error: "" });
+    setCopied(false);
+  };
 
   return (
     <div className="json-panel">
-      <label className="json-panel__label" htmlFor={`json-input-${mode}`}>
-        JSON 输入（{modeLabel}）
-      </label>
-      <textarea
-        aria-label={`JSON 输入（${modeLabel}）`}
-        className="json-panel__input"
-        id={`json-input-${mode}`}
-        onChange={(event) => setInput(event.target.value)}
-        placeholder='{"示例": "粘贴 JSON 后自动处理"}'
-        spellCheck={false}
-        value={input}
-      />
-      <div className="json-panel__result">
-        <div className="json-panel__result-head">
-          <span className="json-panel__result-title">
-            输出{result.error ? "（无效）" : ""}
-          </span>
-          {result.text && mode !== "validate" ? (
-            <button
-              className="json-panel__copy"
-              onClick={() => void copyOutput()}
-              type="button"
-            >
-              {copied ? "已复制" : "复制"}
-            </button>
-          ) : null}
+      {/* 左：输入区 */}
+      <div className="json-panel__side">
+        <div className="json-panel__side-head">
+          <span className="json-panel__label">JSON 输入</span>
+        </div>
+        <textarea
+          aria-label="JSON 输入"
+          className="json-panel__input"
+          onChange={(event) => setInput(event.target.value)}
+          placeholder='{"示例": "粘贴 JSON 后自动处理"}'
+          spellCheck={false}
+          value={input}
+        />
+        <button
+          className="json-panel__clear"
+          onClick={clearAll}
+          type="button"
+        >
+          一键清空
+        </button>
+      </div>
+
+      {/* 右：预览区 */}
+      <div className="json-panel__side">
+        <div className="json-panel__actions">
+          <button
+            aria-pressed={mode === "format"}
+            className={`json-panel__action${
+              mode === "format" ? " is-active" : ""
+            }`}
+            onClick={() => setMode("format")}
+            type="button"
+          >
+            格式化
+          </button>
+          <button
+            aria-pressed={mode === "minify"}
+            className={`json-panel__action${
+              mode === "minify" ? " is-active" : ""
+            }`}
+            onClick={() => setMode("minify")}
+            type="button"
+          >
+            压缩
+          </button>
+          <button
+            className="json-panel__action"
+            disabled={!result.text}
+            onClick={() => void copyOutput()}
+            type="button"
+          >
+            {copied ? "已复制" : "一键复制"}
+          </button>
         </div>
         {result.error ? (
           <pre className="json-panel__error">{result.error}</pre>

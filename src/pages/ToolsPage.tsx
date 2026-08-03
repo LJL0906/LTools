@@ -1,24 +1,22 @@
 import { useState } from "react";
 import { ModuleLayout } from "../components/layout/ModuleLayout";
-import { JsonPanel, type JsonMode } from "../features/tools/JsonPanel";
+import { JsonPanel } from "../features/tools/JsonPanel";
 
 /** 顶部工具 tab（当前仅 JSON 格式化，未来加工具时扩展数组） */
 const TOOL_TABS = [{ id: "json", label: "JSON 格式化" }];
 
-/** 当前工具下的子功能页签（左侧菜单） */
-const SUB_TOOLS: { id: JsonMode; label: string; description: string }[] = [
-  { id: "format", label: "格式化", description: "美化缩进" },
-  { id: "minify", label: "压缩", description: "去除空白" },
-  { id: "validate", label: "校验", description: "检查合法性" },
+/** 当前工具下的子功能页签（左侧菜单；为未来更多工具预留） */
+const SUB_TOOLS: { id: string; label: string; description: string }[] = [
+  { id: "format", label: "格式化", description: "JSON 美化 / 压缩" },
 ];
 
 /**
  * 工具模块：顶部为工具 tab（未来多工具），左侧为当前工具的子功能页签，
- * 右侧为工作区。三个子功能面板常驻挂载、切换显隐，切换页签不丢失输入。
+ * 右侧为工作区（JSON 输入 → 格式化/压缩预览）。
  */
 export function ToolsPage() {
   const [activeTool] = useState("json");
-  const [activeSub, setActiveSub] = useState<JsonMode>("format");
+  const [activeSub, setActiveSub] = useState("format");
 
   return (
     <div className="tools-page">
@@ -65,7 +63,7 @@ export function ToolsPage() {
       >
         {SUB_TOOLS.map((sub) => (
           <div hidden={activeSub !== sub.id} key={sub.id}>
-            <JsonPanel mode={sub.id} />
+            <JsonPanel />
           </div>
         ))}
       </ModuleLayout>

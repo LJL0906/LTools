@@ -19,8 +19,8 @@ function mockClipboard(): void {
   });
 }
 
-function setInput(label: string, value: string): void {
-  fireEvent.change(screen.getByRole("textbox", { name: label }), {
+function setInput(value: string): void {
+  fireEvent.change(screen.getByRole("textbox", { name: "JSON 输入" }), {
     target: { value },
   });
 }
@@ -30,10 +30,10 @@ describe("ToolsPage JSON 工具", () => {
     localStorage.clear();
   });
 
-  it("formats valid JSON with indentation (debounced)", async () => {
+  it("formats valid JSON with indentation by default (debounced)", async () => {
     render(<ToolsPage />);
 
-    setInput("JSON 输入（格式化）", VALID_JSON);
+    setInput(VALID_JSON);
 
     await waitFor(() => {
       expect(document.querySelector(".json-panel__output")?.textContent).toBe(
@@ -45,22 +45,27 @@ describe("ToolsPage JSON 工具", () => {
   it("shows an error for invalid JSON without crashing", async () => {
     render(<ToolsPage />);
 
-    setInput("JSON 输入（格式化）", '{"a": 1,}');
+    setInput('{"a": 1,}');
 
     await waitFor(() => {
-      expect(document.querySelector(".json-panel__error")).not.toBeNull();
+      expect(document.querySelector(".json-panel__error")?.textContent).toMatch(
+        /Unexpected|Expected|token/i,
+      );
     });
-    expect(document.querySelector(".json-panel__error")?.textContent).toMatch(
-      /Unexpected|Expected|token/i,
-    );
   });
 
-  it("minifies JSON to a single line", async () => {
+  it("switches the preview to minified JSON via the compress button", async () => {
     const user = userEvent.setup();
     render(<ToolsPage />);
 
-    await user.click(screen.getByRole("button", { name: /压缩/ }));
-    setInput("JSON 输入（压缩）", PRETTY_JSON);
+    setInput(PRETTY_JSON);
+    await waitFor(() => {
+      expect(document.querySelector(".json-panel__output")?.textContent).toBe(
+        PRETTY_JSON,
+      );
+    });
+
+    await user.click(screen.getByRole("button", { name: "压缩" }));
 
     await waitFor(() => {
       expect(document.querySelector(".json-panel__output")?.textContent).toBe(
@@ -69,46 +74,34 @@ describe("ToolsPage JSON 工具", () => {
     });
   });
 
-  it("validates JSON and reports validity", async () => {
-    const user = userEvent.setup();
-    render(<ToolsPage />);
-
-    await user.click(screen.getByRole("button", { name: /校验/ }));
-    setInput("JSON 输入（校验）", VALID_JSON);
-
-    await waitFor(() => {
-      expect(
-        document.querySelector(".json-panel__output")?.textContent,
-      ).toContain("JSON 合法");
-    });
-  });
-
-  it("copies the formatted output to the clipboard", async () => {
+  it("copies the current preview to the clipboard", async () => {
     mockClipboard();
     const user = userEvent.setup();
     render(<ToolsPage />);
 
-    setInput("JSON 输入（格式化）", VALID_JSON);
-
+    setInput(VALID_JSON);
     await waitFor(() => {
       expect(document.querySelector(".json-panel__output")).not.toBeNull();
     });
-    await user.click(screen.getByRole("button", { name: "复制" }));
+
+    await user.click(screen.getByRole("button", { name: "一键复制" }));
 
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(PRETTY_JSON);
   });
 
-  it("keeps each sub-tool's input when switching tabs", async () => {
+  it("clears input and preview via the clear button", async () => {
     const user = userEvent.setup();
     render(<ToolsPage />);
 
-    setInput("JSON 输入（格式化）", VALID_JSON);
-    // 切到压缩再切回：格式化面板输入应保留
-    await user.click(screen.getByRole("button", { name: /压缩/ }));
-    await user.click(screen.getByRole("button", { name: /格式化/ }));
+    setInput(VALID_JSON);
+    await waitFor(() => {
+      expect(document.querySelector(".json-panel__output")).not.toBeNull();
+    });
 
-    expect(
-      screen.getByRole("textbox", { name: "JSON 输入（格式化）" }),
-    ).toHaveValue(VALID_JSON);
+    await user.click(screen.getByRole("button", { name: "一键清空" }));
+
+    expect(screen.getByRole("textbox", { name: "JSON 输入" })).toHaveValue("");
+    expect(document.querySelector(".json-panel__output")).toBeNull();
+    expect(screen.getByText("等待输入…")).toBeInTheDocument();
   });
 });

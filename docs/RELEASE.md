@@ -13,7 +13,7 @@ $env:HTTPS_PROXY = "http://127.0.0.1:7892"
 # 0.2 提供签名私钥（本地打包时 tauri 只找到公钥会报
 #     "A public key has been found, but no private key"）
 $env:TAURI_SIGNING_PRIVATE_KEY = Get-Content .tauri\ltools.key -Raw
-$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = "ltools-sign-2026"
+$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = "<私钥密码>"
 
 # 0.3 完整打包 + 签名
 pnpm tauri build
@@ -33,7 +33,7 @@ pnpm tauri build
 
 - 私钥：`.tauri/ltools.key`
 - 公钥：`.tauri/ltools.key.pub`（已嵌入 `src-tauri/tauri.conf.json` 的 `plugins.updater.pubkey`）
-- 私钥密码：`ltools-sign-2026`（可自行更换，更换后需同步更新下方 Secrets 与 pubkey）
+- 私钥密码：`<私钥密码>`（可自行更换，更换后需同步更新下方 Secrets 与 pubkey）
 
 > ⚠️ 私钥或密码丢失将无法签名新版本，已发布的旧版本也无法再收到更新。请妥善备份私钥。
 
@@ -44,7 +44,7 @@ pnpm tauri build
 | Secret 名 | 值 |
 |---|---|
 | `TAURI_SIGNING_PRIVATE_KEY` | `.tauri/ltools.key` 的**文件内容** |
-| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | `ltools-sign-2026` |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | `<私钥密码>` |
 
 ## 3. 发版流程
 

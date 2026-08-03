@@ -35,3 +35,6 @@ src-tauri/gen/schemas
 
 # Playwright MCP test artifacts
 .playwright-mcp/
+
+# Reasonix local tool state (auto-updated, contains local paths)
+reasonix.toml
