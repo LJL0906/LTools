@@ -381,3 +381,84 @@ pub fn import_backup(path: String) -> Result<serde_json::Value, String> {
         .cloned()
         .ok_or_else(|| "备份文件缺少数据".to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_backup_path(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join("ltools-backup-tests");
+        std::fs::create_dir_all(&dir).unwrap();
+        dir.join(name)
+    }
+
+    /// 导出 → 导入往返：数据应完整一致（含中文、嵌套结构、设置）。
+    #[test]
+    fn backup_export_import_roundtrip_preserves_data() {
+        let path = temp_backup_path("roundtrip.zip");
+        let data = serde_json::json!({
+            "links": [{
+                "id": "l1", "title": "API 文档", "protocol": "https",
+                "address": "example.com", "notes": "接口说明", "groupId": "g1"
+            }],
+            "linkGroups": [{"id": "g1", "name": "工作"}],
+            "notes": [{
+                "id": "n1", "title": "会议记录", "content": "<p>中文内容</p>",
+                "groupId": null, "time": "刚刚"
+            }],
+            "noteGroups": [],
+            "clipboardItems": [{"id": "c1", "text": "剪贴板内容", "createdAt": 1700000000}],
+            "settings": {"windowWidth": 960, "windowHeight": 680, "minimize_to_tray": true}
+        });
+
+        export_backup(path.to_str().unwrap().to_string(), data.clone()).unwrap();
+
+        let got = import_backup(path.to_str().unwrap().to_string()).unwrap();
+        assert_eq!(got, data, "导出导入往返后数据应逐字段一致");
+        std::fs::remove_file(&path).ok();
+    }
+
+    /// 非 zip 文件、以及缺 manifest.json 的 zip 都应被拒绝。
+    #[test]
+    fn import_rejects_invalid_archive() {
+        let bad = temp_backup_path("not-a-zip.txt");
+        std::fs::write(&bad, "this is not a zip").unwrap();
+        assert!(import_backup(bad.to_str().unwrap().to_string()).is_err());
+
+        let zip_path = temp_backup_path("no-manifest.zip");
+        {
+            let f = std::fs::File::create(&zip_path).unwrap();
+            let mut zw = ZipWriter::new(f);
+            zw.start_file("other.txt", SimpleFileOptions::default()).unwrap();
+            std::io::Write::write_all(&mut zw, b"x").unwrap();
+            zw.finish().unwrap();
+        }
+        assert!(
+            import_backup(zip_path.to_str().unwrap().to_string()).is_err(),
+            "缺少 manifest.json 的 zip 应被拒绝"
+        );
+        std::fs::remove_file(&bad).ok();
+        std::fs::remove_file(&zip_path).ok();
+    }
+
+    /// manifest 中 format 标识不是 ltools-backup 时拒绝导入。
+    #[test]
+    fn import_rejects_wrong_format() {
+        let zip_path = temp_backup_path("wrong-format.zip");
+        {
+            let f = std::fs::File::create(&zip_path).unwrap();
+            let mut zw = ZipWriter::new(f);
+            zw.start_file(BACKUP_MANIFEST, SimpleFileOptions::default())
+                .unwrap();
+            let manifest = serde_json::json!({ "format": "other-app", "version": 1, "data": {} });
+            let raw = serde_json::to_string(&manifest).unwrap();
+            std::io::Write::write_all(&mut zw, raw.as_bytes()).unwrap();
+            zw.finish().unwrap();
+        }
+        assert!(
+            import_backup(zip_path.to_str().unwrap().to_string()).is_err(),
+            "format 标识不匹配的备份应被拒绝"
+        );
+        std::fs::remove_file(&zip_path).ok();
+    }
+}
