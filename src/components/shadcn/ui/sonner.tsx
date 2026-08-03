@@ -1,5 +1,8 @@
 "use client"
 
+// sonner 样式改为外部 CSS（打包进主样式文件，受 CSP 'self' 允许），
+// 避免运行时内联 <style> 注入被生产环境 CSP 拦截导致 toast 无样式不可见
+import "sonner/dist/styles.css"
 import { useTheme } from "next-themes"
 import { Toaster as Sonner, type ToasterProps } from "sonner"
 import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from "lucide-react"
