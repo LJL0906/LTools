@@ -1689,3 +1689,171 @@
   background: #f1f2f4;
   color: var(--color-danger);
 }
+
+/* ---- 工具模块 ---- */
+.tools-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.tools-page__toolbar {
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3) 0;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.tools-page__tool-tab {
+  padding: 6px 14px;
+  font-size: 13px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.tools-page__tool-tab[aria-selected="true"] {
+  background: var(--color-bg-nav-active);
+  color: var(--color-primary-text);
+  font-weight: 500;
+}
+
+.tools-page__menu {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--space-2);
+}
+
+.tools-page__menu-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.tools-page__menu-item:hover,
+.tools-page__menu-item.is-active {
+  background: var(--color-bg-active);
+}
+
+.tools-page__menu-label {
+  font-size: 13px;
+  color: var(--color-text);
+}
+
+.tools-page__menu-item.is-active .tools-page__menu-label {
+  color: var(--color-primary-text);
+  font-weight: 500;
+}
+
+.tools-page__menu-desc {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.json-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+.json-panel__label {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.json-panel__input {
+  min-height: 160px;
+  resize: vertical;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 8px var(--space-3);
+  border: 1px solid #d9dbe0;
+  border-radius: var(--radius-md);
+  background: #fff;
+  color: var(--color-text);
+}
+
+.json-panel__result {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.json-panel__result-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-1);
+}
+
+.json-panel__result-title {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.json-panel__copy {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid #d9dbe0;
+  background: #fff;
+  cursor: pointer;
+  color: var(--color-text);
+}
+
+.json-panel__copy:hover {
+  background: var(--color-bg-active);
+}
+
+.json-panel__output,
+.json-panel__error {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  padding: 8px var(--space-3);
+  border-radius: var(--radius-md);
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.json-panel__output {
+  background: #f7f8fa;
+  color: var(--color-text);
+}
+
+.json-panel__error {
+  background: #fdf2f2;
+  color: var(--color-danger);
+}
+
+.json-panel__placeholder {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  border: 1px dashed #d9dbe0;
+  border-radius: var(--radius-md);
+}

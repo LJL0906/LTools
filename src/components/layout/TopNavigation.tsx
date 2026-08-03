@@ -5,6 +5,7 @@ const modules = [
   { label: "链接", to: "/links" },
   { label: "笔记", to: "/notes" },
   { label: "剪切板", to: "/clipboard" },
+  { label: "工具", to: "/tools" },
   { label: "设置", to: "/settings" },
 ];
 

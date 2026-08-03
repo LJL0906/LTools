@@ -22,6 +22,7 @@ import { TooltipProvider } from "./components/shadcn/ui/tooltip";
 import { LinksRoutePage } from "./pages/LinksPage";
 import { NotesPage } from "./pages/NotesPage";
 import { ClipboardPage } from "./pages/ClipboardPage";
+import { ToolsPage } from "./pages/ToolsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { QuickSearchPage } from "./pages/QuickSearchPage";
 import { isTauriRuntime } from "./lib/data";
@@ -127,6 +128,7 @@ function AppRoutes() {
           <Route path="links" element={<LinksRoutePage />} />
           <Route path="notes" element={<NotesPage />} />
           <Route path="clipboard" element={<ClipboardPage />} />
+          <Route path="tools" element={<ToolsPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate replace to="/links" />} />
         </Route>
