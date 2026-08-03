@@ -3,6 +3,30 @@
 应用内「检查更新」通过 GitHub Releases 端点获取新版本并自动下载安装。
 发布流程全部由 GitHub Actions 完成。
 
+## 0. 本地预检（可选但推荐，发布前验证打包签名链路）
+
+```powershell
+# 0.1 若 WiX / NSIS 工具链下载卡住（GitHub 网络问题），先走本地代理
+$env:HTTP_PROXY = "http://127.0.0.1:7892"
+$env:HTTPS_PROXY = "http://127.0.0.1:7892"
+
+# 0.2 提供签名私钥（本地打包时 tauri 只找到公钥会报
+#     "A public key has been found, but no private key"）
+$env:TAURI_SIGNING_PRIVATE_KEY = Get-Content .tauri\ltools.key -Raw
+$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = "ltools-sign-2026"
+
+# 0.3 完整打包 + 签名
+pnpm tauri build
+```
+
+验证 `src-tauri/target/release/bundle/` 下同时产出：
+
+- `msi/LTools_*.msi` + `.msi.sig`
+- `nsis/LTools_*-setup.exe` + `.exe.sig`
+
+> ⚠️ `latest.json` 由 GitHub Actions 的 `tauri-action` 在发布时生成上传，**本地不会生成**，属正常现象。
+> 2026-08-03 实测：本地代理 7892 + 私钥环境变量下，MSI/NSIS 与两个 `.sig` 签名产物全部生成成功。
+
 ## 1. 签名密钥
 
 密钥对已在开发机生成，位于（**不要提交到仓库**，已加入 `.gitignore`）：

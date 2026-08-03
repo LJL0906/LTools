@@ -68,12 +68,15 @@ export function useNoteTarget() {
 /** 监听 Rust 侧 open-note 事件（快捷搜索选中笔记），跳转并设置目标笔记 */
 function AppRoutes() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [targetNoteId, setTargetNoteId] = useState<string | null>(null);
 
-  // open-note 事件：仅记录目标笔记（navigate 由下方 effect 处理，
-  // 避免在事件回调中调用导航导致 transition 无法可靠提交）
+  // open-note 事件：仅主窗口监听（快捷搜索窗口不响应，避免被全局广播
+  // 污染路由——open_note_in_main 的 emit 会广播到所有窗口）。仅记录目标
+  // 笔记（navigate 由下方 effect 处理，避免在事件回调中调用导航导致
+  // transition 无法可靠提交）。
   useEffect(() => {
-    if (!isTauriRuntime()) return;
+    if (!isTauriRuntime() || isSearchWindow()) return;
     let unlisten: UnlistenFn | undefined;
     let disposed = false;
     void listen<string>("open-note", (event) => {
@@ -106,6 +109,12 @@ function AppRoutes() {
     }),
     [targetNoteId],
   );
+
+  // 快捷搜索窗口强制进入 /search（渲染期决定，避免与 index 路由的
+  // `<Navigate to="/links">` 在 effect 阶段竞态导致偶发展示主窗口内容）。
+  if (isSearchWindow() && location.pathname !== "/search") {
+    return <Navigate to="/search" replace />;
+  }
 
   return (
     <NoteTargetContext.Provider value={noteTarget}>

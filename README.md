@@ -39,8 +39,9 @@
 
 - 开机自启动（autostart 插件，带成功/失败反馈）
 - 启动最小化到托盘 / 关闭窗口时最小化到托盘（Tauri 系统托盘 + close 拦截）
-- 全局快捷键（Rust 侧注册，按下唤起主窗口）
-- 快捷搜索快捷键：独立搜索窗口（560×440，快捷键显隐循环、失焦自动隐藏；搜索链接直接打开默认浏览器、点击笔记唤起主窗口选中该笔记）
+- 全局快捷键（Rust 侧注册，按下**切换**主窗口显示/隐藏：显示时隐藏到托盘、隐藏时唤出；托盘图标/菜单为"只显示"不隐藏）
+- 主窗口默认不占任务栏（`skipTaskbar`），仅主动最小化时出现在任务栏便于恢复
+- 快捷搜索快捷键：独立搜索窗口（560×440，快捷键显隐循环、失焦自动隐藏；搜索链接直接打开默认浏览器、点击笔记唤起主窗口选中该笔记；结果支持 ↑/↓ 选择 + 回车打开，无本地结果时提供百度搜索兜底条目，回车用默认浏览器搜索关键词）
 - 自定义窗口宽高（Rust 启动时应用，含最小值校验）
 - 数据库存储路径：真实控制 SQLite 文件位置（默认 `app_data_dir/ltools.db`，切换自动迁移数据）
 - 数据备份：导出（链接/笔记/剪切板/设置打包 zip）、导入恢复（校验后写回并刷新）
@@ -53,8 +54,8 @@
 - 可拖拽调整宽度的侧栏（Pointer Events 拖拽 + 键盘微调，含可访问性语义）
 - 统一的 Dialog / ConfirmDialog / 搜索框 / 按钮 / 图标按钮 / Switch 组件
 - 统一的颜色、圆角、间距设计 Token
-- **数据自动保存**：笔记、链接及分组变更后防抖写入 localStorage（200ms 合并 + 关窗/切后台强制落盘），刷新或重启自动恢复，无保存按钮
-- 42 个前端交互测试通过（2026-08-02 基线）；快捷键绑定接入后为 72 个
+- **数据自动保存**：桌面环境逐条 CRUD 写入 SQLite（新增/编辑/删除单条命令，删组事务内移出组内条目），浏览器 dev / 测试降级 localStorage 防抖写（200ms 合并 + 关窗/切后台强制落盘），无保存按钮
+- 42 个前端交互测试通过（2026-08-02 基线）；逐条 CRUD 重构后为 94 个
 
 ### 🚧 规划中
 
@@ -71,7 +72,7 @@
 | 路由 | React Router 7 |
 | UI | Tailwind CSS 4、shadcn/ui、Radix UI、Lucide 图标 |
 | 状态管理 | Zustand（依赖已装，暂未使用） |
-| 本地存储 | localStorage（防抖自动保存） |
+| 本地存储 | SQLite 逐条 CRUD（upsert/delete 单条命令；全量快照命令保留用于迁移/备份/导入导出；浏览器降级 localStorage） |
 | 富文本 | Tiptap 3（笔记编辑器已接入） |
 | 测试 | Vitest 4、Testing Library、jsdom |
 | 包管理 | pnpm 11 |
@@ -144,5 +145,5 @@ LTools/
 
 ## 📌 说明
 
-- 数据自动保存在 SQLite 数据库（默认 `app_data_dir/ltools.db`，可在设置中更换存储目录并自动迁移）；业务数据存于 `links` / `notes` / `link_groups` / `note_groups` / `clipboard_items` 表，系统级设置存于 `app_settings` 表。浏览器 dev / 测试模式降级为 localStorage（`ltools.*` 键），旧版 settings.json 首次启动自动迁移。备份 zip 内为 `manifest.json`。
+- 数据自动保存在 SQLite 数据库（默认 `app_data_dir/ltools.db`，可在设置中更换存储目录并自动迁移）；业务数据存于 `links` / `notes` / `link_groups` / `note_groups` / `clipboard_items` 表，**写入为逐条 CRUD 命令**（全量快照命令保留用于一次性迁移 / 备份导入导出 / 切换库），系统级设置存于 `app_settings` 表。浏览器 dev / 测试模式降级为 localStorage（`ltools.*` 键），旧版 settings.json 首次启动自动迁移。备份 zip 内为 `manifest.json`。
 - 本项目文档与 UI 规范以中文维护。

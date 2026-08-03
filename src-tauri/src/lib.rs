@@ -29,6 +29,18 @@ pub fn run() {
             settings::open_note_in_main,
             db::get_all_data,
             db::replace_all_data,
+            // 逐条 CRUD（upsert = 新增或更新单条）
+            db::upsert_link,
+            db::delete_link,
+            db::upsert_link_group,
+            db::delete_link_group,
+            db::upsert_note,
+            db::delete_note,
+            db::upsert_note_group,
+            db::delete_note_group,
+            db::upsert_clipboard_item,
+            db::delete_clipboard_item,
+            db::clear_clipboard_items,
         ])
         .setup(|app| {
             // 初始化 SQLite 数据层：先打开默认引导库（设置存于其中）
@@ -94,6 +106,14 @@ pub fn run() {
                     // 快捷搜索窗口失焦（点击窗口外部区域）→ 立即隐藏
                     if window.label() == "search" {
                         let _ = window.hide();
+                    }
+                }
+                // 主窗口任务栏按钮规则：显示期间不占任务栏（skipTaskbar），
+                // 仅当用户主动最小化时出现在任务栏（保留恢复入口），恢复后再次隐藏。
+                WindowEvent::Resized(_) => {
+                    if window.label() == "main" {
+                        // set_skip_taskbar 幂等，重复调用无副作用（无查询 API）
+                        let _ = window.set_skip_taskbar(!window.is_minimized().unwrap_or(false));
                     }
                 }
                 _ => {}

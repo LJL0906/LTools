@@ -21,7 +21,14 @@ import { NoteEditor } from "../features/notes/NoteEditor";
 import type { NoteItem } from "../features/notes/types";
 import { useNoteTarget } from "../App";
 import { loadState, STORAGE_KEYS } from "../lib/storage";
-import { loadNotesData, isTauriRuntime, persistNotes } from "../lib/data";
+import {
+  deleteNote,
+  deleteNoteGroup,
+  isTauriRuntime,
+  loadNotesData,
+  upsertNote,
+  upsertNoteGroup,
+} from "../lib/data";
 
 const initialNoteGroups: GroupItem[] = [
   { id: "work", name: "工作" },
@@ -197,11 +204,13 @@ export function NotesPage() {
 
   const updateActiveNote = (changes: Partial<NoteItem>) => {
     if (!activeNote) return;
+    const updated = { ...activeNote, ...changes };
     setNotes((currentNotes) =>
       currentNotes.map((note) =>
-        note.id === activeNote.id ? { ...note, ...changes } : note,
+        note.id === activeNote.id ? updated : note,
       ),
     );
+    upsertNote(updated);
   };
 
   const createNote = () => {
@@ -218,6 +227,7 @@ export function NotesPage() {
     };
     setNotes((currentNotes) => [note, ...currentNotes]);
     setActiveNoteId(note.id);
+    upsertNote(note);
   };
 
   /** 首次加载：Tauri 用 SQLite 数据覆盖初始值（含一次性迁移）；浏览器初始值即最终值 */
@@ -233,11 +243,6 @@ export function NotesPage() {
       disposed = true;
     };
   }, []);
-
-  /** 数据变更后持久化（Tauri → SQLite 快照写；浏览器 → localStorage 防抖） */
-  useEffect(() => {
-    persistNotes(notes, groups);
-  }, [notes, groups]);
 
   const handleToggleExpand = (groupId: string | null) => {
     setExpandedGroupId((prev) => (prev === groupId ? null : groupId));
@@ -257,6 +262,7 @@ export function NotesPage() {
     }
     setDeletingGroup(null);
     setActiveMenuGroupId(null);
+    deleteNoteGroup(group.id);
   };
 
   return (
@@ -330,10 +336,9 @@ export function NotesPage() {
           mode="create"
           onCancel={() => setIsCreatingGroup(false)}
           onSave={(name) => {
-            setGroups((currentGroups) => [
-              ...currentGroups,
-              { id: crypto.randomUUID(), name },
-            ]);
+            const group: GroupItem = { id: crypto.randomUUID(), name };
+            setGroups((currentGroups) => [...currentGroups, group]);
+            upsertNoteGroup(group);
             setIsCreatingGroup(false);
           }}
           scope="notes"
@@ -345,11 +350,13 @@ export function NotesPage() {
           mode="rename"
           onCancel={() => setEditingGroup(null)}
           onSave={(name) => {
+            const group: GroupItem = { ...editingGroup, name };
             setGroups((currentGroups) =>
               currentGroups.map((g) =>
-                g.id === editingGroup.id ? { ...g, name } : g,
+                g.id === editingGroup.id ? group : g,
               ),
             );
+            upsertNoteGroup(group);
             setEditingGroup(null);
           }}
           scope="notes"
@@ -374,6 +381,7 @@ export function NotesPage() {
               currentNotes.filter((note) => note.id !== activeNote.id),
             );
             setIsDeletingNote(false);
+            deleteNote(activeNote.id);
           }}
           title="删除笔记"
         />

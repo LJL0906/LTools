@@ -6,8 +6,16 @@ import {
   loadNotesData,
   persistLinks,
   persistNotes,
+  upsertLink,
+  deleteLink,
+  deleteLinkGroup,
+  upsertNote,
+  deleteNote,
+  upsertClipboardItem,
+  deleteClipboardItem,
+  clearClipboardItems,
 } from "./data";
-import { STORAGE_KEYS } from "./storage";
+import { STORAGE_KEYS, loadState } from "./storage";
 import type { LinkItem } from "../features/links/types";
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -159,5 +167,93 @@ describe("data layer (Tauri runtime)", () => {
     );
     const { notes } = await loadNotesData();
     expect(notes).toEqual([{ id: "n1", title: "本地笔记" }]);
+  });
+});
+
+describe("per-item CRUD", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.clearAllMocks();
+    delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
+  });
+
+  it("upserts and deletes a link in localStorage (browser fallback)", () => {
+    vi.useFakeTimers();
+    upsertLink(makeLink({ id: "l1", title: "新链接" }));
+    vi.advanceTimersByTime(250);
+    expect(loadState(STORAGE_KEYS.links, [])).toEqual([
+      expect.objectContaining({ id: "l1", title: "新链接" }),
+    ]);
+
+    // 同 id 覆盖更新
+    upsertLink(makeLink({ id: "l1", title: "改名" }));
+    vi.advanceTimersByTime(250);
+    expect(loadState(STORAGE_KEYS.links, [])).toEqual([
+      expect.objectContaining({ id: "l1", title: "改名" }),
+    ]);
+
+    // 删除
+    deleteLink("l1");
+    vi.advanceTimersByTime(250);
+    expect(loadState(STORAGE_KEYS.links, [])).toEqual([]);
+    vi.useRealTimers();
+  });
+
+  it("moves group links to ungrouped when deleting a link group (browser fallback)", () => {
+    localStorage.setItem(
+      STORAGE_KEYS.links,
+      JSON.stringify([
+        { id: "l1", groupId: "g1" },
+        { id: "l2", groupId: null },
+      ]),
+    );
+    localStorage.setItem(STORAGE_KEYS.linkGroups, JSON.stringify([{ id: "g1", name: "组" }]));
+
+    vi.useFakeTimers();
+    deleteLinkGroup("g1");
+    vi.advanceTimersByTime(250);
+
+    expect(loadState(STORAGE_KEYS.linkGroups, [])).toEqual([]);
+    const links = loadState(STORAGE_KEYS.links, []);
+    expect(links).toHaveLength(2);
+    expect(links[0]).toEqual({ id: "l1", groupId: null });
+    expect(links[1]).toEqual({ id: "l2", groupId: null });
+    vi.useRealTimers();
+  });
+
+  it("clears clipboard items in localStorage (browser fallback)", () => {
+    localStorage.setItem(
+      STORAGE_KEYS.clipboardItems,
+      JSON.stringify([{ id: "c1", text: "x" }]),
+    );
+    vi.useFakeTimers();
+    clearClipboardItems();
+    vi.advanceTimersByTime(250);
+    expect(loadState(STORAGE_KEYS.clipboardItems, [])).toEqual([]);
+    vi.useRealTimers();
+  });
+
+  it("dispatches per-item commands to SQLite in the Tauri runtime", () => {
+    mockTauri();
+    const link = makeLink({ id: "l1", title: "A" });
+    upsertLink(link);
+    deleteLink("l1");
+    upsertNote({ id: "n1", title: "笔记", content: "", groupId: null, time: "" });
+    deleteNote("n1");
+    upsertClipboardItem({ id: "c1", text: "x", createdAt: 1 });
+    deleteClipboardItem("c1");
+    clearClipboardItems();
+
+    expect(mockedInvoke).toHaveBeenCalledWith("upsert_link", { link });
+    expect(mockedInvoke).toHaveBeenCalledWith("delete_link", { id: "l1" });
+    expect(mockedInvoke).toHaveBeenCalledWith("upsert_note", {
+      note: { id: "n1", title: "笔记", content: "", groupId: null, time: "" },
+    });
+    expect(mockedInvoke).toHaveBeenCalledWith("delete_note", { id: "n1" });
+    expect(mockedInvoke).toHaveBeenCalledWith("upsert_clipboard_item", {
+      item: { id: "c1", text: "x", createdAt: 1 },
+    });
+    expect(mockedInvoke).toHaveBeenCalledWith("delete_clipboard_item", { id: "c1" });
+    expect(mockedInvoke).toHaveBeenCalledWith("clear_clipboard_items");
   });
 });

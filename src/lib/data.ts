@@ -211,3 +211,162 @@ export function saveAllData(data: AllData): void {
   saveStateDebounced(STORAGE_KEYS.noteGroups, data.noteGroups);
   saveStateDebounced(STORAGE_KEYS.clipboardItems, data.clipboardItems);
 }
+
+// ---------------------------------------------------------------------------
+// 逐条 CRUD（upsert = 新增或更新单条）
+// Tauri：调用 SQLite 单条命令；浏览器：localStorage 读改写降级。
+// ---------------------------------------------------------------------------
+
+const CRUD_COMMANDS = {
+  upsertLink: "upsert_link",
+  deleteLink: "delete_link",
+  upsertLinkGroup: "upsert_link_group",
+  deleteLinkGroup: "delete_link_group",
+  upsertNote: "upsert_note",
+  deleteNote: "delete_note",
+  upsertNoteGroup: "upsert_note_group",
+  deleteNoteGroup: "delete_note_group",
+  upsertClipboardItem: "upsert_clipboard_item",
+  deleteClipboardItem: "delete_clipboard_item",
+  clearClipboardItems: "clear_clipboard_items",
+} as const;
+
+/** 浏览器降级：对 localStorage 中的数组做一次读改写（防抖落盘） */
+function mutateLocalArray<T>(key: string, mutate: (items: T[]) => T[]): void {
+  saveStateDebounced(key, mutate(loadState<T[]>(key, [])));
+}
+
+/** 新增 / 更新一条链接 */
+export function upsertLink(link: LinkItem): void {
+  if (isTauriRuntime()) {
+    void invoke(CRUD_COMMANDS.upsertLink, { link }).catch(() => undefined);
+    return;
+  }
+  mutateLocalArray<LinkItem>(STORAGE_KEYS.links, (items) => {
+    const idx = items.findIndex((x) => x.id === link.id);
+    if (idx === -1) return [...items, link];
+    const next = [...items];
+    next[idx] = link;
+    return next;
+  });
+}
+
+/** 删除一条链接 */
+export function deleteLink(id: string): void {
+  if (isTauriRuntime()) {
+    void invoke(CRUD_COMMANDS.deleteLink, { id }).catch(() => undefined);
+    return;
+  }
+  mutateLocalArray<LinkItem>(STORAGE_KEYS.links, (items) => items.filter((x) => x.id !== id));
+}
+
+/** 新增 / 更新一个链接分组 */
+export function upsertLinkGroup(group: GroupItem): void {
+  if (isTauriRuntime()) {
+    void invoke(CRUD_COMMANDS.upsertLinkGroup, { group }).catch(() => undefined);
+    return;
+  }
+  mutateLocalArray<GroupItem>(STORAGE_KEYS.linkGroups, (items) => {
+    const idx = items.findIndex((x) => x.id === group.id);
+    if (idx === -1) return [...items, group];
+    const next = [...items];
+    next[idx] = group;
+    return next;
+  });
+}
+
+/** 删除链接分组：组内链接移到未分组（Rust 侧单事务完成，降级路径此处模拟） */
+export function deleteLinkGroup(id: string): void {
+  if (isTauriRuntime()) {
+    void invoke(CRUD_COMMANDS.deleteLinkGroup, { id }).catch(() => undefined);
+    return;
+  }
+  mutateLocalArray<LinkItem>(STORAGE_KEYS.links, (items) =>
+    items.map((l) => (l.groupId === id ? { ...l, groupId: null } : l)),
+  );
+  mutateLocalArray<GroupItem>(STORAGE_KEYS.linkGroups, (items) => items.filter((g) => g.id !== id));
+}
+
+/** 新增 / 更新一条笔记 */
+export function upsertNote(note: NoteItem): void {
+  if (isTauriRuntime()) {
+    void invoke(CRUD_COMMANDS.upsertNote, { note }).catch(() => undefined);
+    return;
+  }
+  mutateLocalArray<NoteItem>(STORAGE_KEYS.notes, (items) => {
+    const idx = items.findIndex((x) => x.id === note.id);
+    if (idx === -1) return [...items, note];
+    const next = [...items];
+    next[idx] = note;
+    return next;
+  });
+}
+
+/** 删除一条笔记 */
+export function deleteNote(id: string): void {
+  if (isTauriRuntime()) {
+    void invoke(CRUD_COMMANDS.deleteNote, { id }).catch(() => undefined);
+    return;
+  }
+  mutateLocalArray<NoteItem>(STORAGE_KEYS.notes, (items) => items.filter((x) => x.id !== id));
+}
+
+/** 新增 / 更新一个笔记分组 */
+export function upsertNoteGroup(group: GroupItem): void {
+  if (isTauriRuntime()) {
+    void invoke(CRUD_COMMANDS.upsertNoteGroup, { group }).catch(() => undefined);
+    return;
+  }
+  mutateLocalArray<GroupItem>(STORAGE_KEYS.noteGroups, (items) => {
+    const idx = items.findIndex((x) => x.id === group.id);
+    if (idx === -1) return [...items, group];
+    const next = [...items];
+    next[idx] = group;
+    return next;
+  });
+}
+
+/** 删除笔记分组：组内笔记移到未分组（Rust 侧单事务完成，降级路径此处模拟） */
+export function deleteNoteGroup(id: string): void {
+  if (isTauriRuntime()) {
+    void invoke(CRUD_COMMANDS.deleteNoteGroup, { id }).catch(() => undefined);
+    return;
+  }
+  mutateLocalArray<NoteItem>(STORAGE_KEYS.notes, (items) =>
+    items.map((n) => (n.groupId === id ? { ...n, groupId: null } : n)),
+  );
+  mutateLocalArray<GroupItem>(STORAGE_KEYS.noteGroups, (items) => items.filter((g) => g.id !== id));
+}
+
+/** 新增 / 更新一条剪切板历史条目 */
+export function upsertClipboardItem(item: ClipboardEntry): void {
+  if (isTauriRuntime()) {
+    void invoke(CRUD_COMMANDS.upsertClipboardItem, { item }).catch(() => undefined);
+    return;
+  }
+  mutateLocalArray<ClipboardEntry>(STORAGE_KEYS.clipboardItems, (items) => {
+    const idx = items.findIndex((x) => x.id === item.id);
+    if (idx === -1) return [...items, item];
+    const next = [...items];
+    next[idx] = item;
+    return next;
+  });
+}
+
+/** 删除一条剪切板历史条目 */
+export function deleteClipboardItem(id: string): void {
+  if (isTauriRuntime()) {
+    void invoke(CRUD_COMMANDS.deleteClipboardItem, { id }).catch(() => undefined);
+    return;
+  }
+  mutateLocalArray<ClipboardEntry>(STORAGE_KEYS.clipboardItems, (items) => items.filter((x) => x.id !== id));
+}
+
+/** 清空全部剪切板历史 */
+export function clearClipboardItems(): void {
+  if (isTauriRuntime()) {
+    void invoke(CRUD_COMMANDS.clearClipboardItems).catch(() => undefined);
+    return;
+  }
+  mutateLocalArray<ClipboardEntry>(STORAGE_KEYS.clipboardItems, () => []);
+}

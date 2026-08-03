@@ -18,7 +18,7 @@ LTools 是面向 Windows 10/11 的本地优先桌面效率工具，计划提供�
 | 笔记 | 静态交互已完成 | 搜索、分组筛选、新建、切换、标题与正文编辑、删除、Tiptap 富文本格式化、localStorage 持久化 |
 | 剪切板 | 已完成 | 系统剪贴板文本监听（Rust 轮询）、历史列表、复制回剪贴板、详情弹窗、删除、清空、搜索、SQLite 持久化 |
 | 设置 | 已完成（全部真实生效） | 开机自启、托盘×2、全局快捷键、快捷搜索窗口与快捷键、窗口宽高、数据库存储路径（真实控制 SQLite 位置）、备份导入导出、重启、检查更新（GitHub Releases）；设置存 SQLite `app_settings` 表 |
-| 数据层 | 已完成（SQLite） | 业务数据五表 + `app_settings` 表全量快照读写；localStorage 仅作浏览器降级与一次性迁移来源；数据库路径可配置 |
+| 数据层 | 已完成（SQLite） | 业务数据五表 + `app_settings` 表；写入为逐条 CRUD 命令（upsert/delete 单条，删组事务内移出组内条目），全量快照命令保留用于迁移/备份/切换库；localStorage 仅作浏览器降级与一次性迁移来源；数据库路径可配置 |
 | 快捷搜索面板 | 未开发 | 尚未创建独立 Tauri 窗口和快捷键行为 |
 
 ## 3. 技术栈
@@ -176,14 +176,15 @@ UI 文档统一保存在：
 
 ### 设置模块与 SQLite 数据层（2026-08-03）
 
-- **SQLite 数据层**（`src-tauri/src/db.rs`）：五张业务表（links/link_groups/notes/note_groups/clipboard_items）+ `app_settings` 表；「全量快照」读写（`get_all_data` / `replace_all_data`，单事务）；默认库 `app_data_dir/ltools.db`。
+- **SQLite 数据层**（`src-tauri/src/db.rs`）：五张业务表（links/link_groups/notes/note_groups/clipboard_items）+ `app_settings` 表；写入以**逐条 CRUD 命令**为主（`upsert_link/delete_link/upsert_link_group/delete_link_group/upsert_note/delete_note/upsert_note_group/delete_note_group/upsert_clipboard_item/delete_clipboard_item/clear_clipboard_items`，删组命令在事务内把组内条目移到未分组；`get_all_data`/`replace_all_data` 全量命令保留用于一次性迁移 / 备份导入导出 / 切换库）；默认库 `app_data_dir/ltools.db`。
 - **所有设置存 SQLite** `app_settings` 表（单行 JSON，`#[serde(default)]` 向前兼容）；旧版 `settings.json` 首次启动自动迁移；写入同步到「当前库 + 默认引导库」两份，`db_path` 作为引导指针。
 - **数据库存储路径真实生效**：设置目录 → `目录/ltools.db`；切换时自动迁移数据与设置；启动时从默认引导库读取 `db_path` 并切换到目标库。
 - **localStorage → SQLite 迁移**：前端 data 层首次检测到库空且有残留数据时自动一次性导入；浏览器 dev / 测试模式仍降级 localStorage。
 - 开机自启动：前端直接调 autostart 插件（`enable`/`disable`/`isEnabled`），失败回滚并提示。
 - 启动/关闭最小化到托盘：`tray-icon` feature + `TrayIconBuilder`（菜单：显示主窗口 / 退出，左键单击显示）；`on_window_event` 拦截 `CloseRequested`。
-- 全局快捷键 + 快捷搜索快捷键：Rust 侧 `on_shortcut` 注册，按下分别唤起主窗口 / 快捷搜索窗口。
-- 快捷搜索窗口：独立 `search` 窗口（560×440），复用前端入口按 label 路由 `/search`；全局搜索链接与笔记，点击链接打开浏览器。
+- 全局快捷键 + 快捷搜索快捷键：Rust 侧 `on_shortcut` 注册，分别**切换**主窗口显示/隐藏（显示时按 → 隐藏到托盘，隐藏时按 → 唤出；托盘图标/菜单仍为"只显示"）、唤起快捷搜索窗口。
+- 主窗口任务栏规则：显示期间不占任务栏（`skipTaskbar`），仅用户主动最小化时出现在任务栏（可恢复），恢复后再次隐藏。
+- 快捷搜索窗口：独立 `search` 窗口（560×440），复用前端入口按 label 路由 `/search`；全局搜索链接与笔记，点击链接打开浏览器；结果支持 ↑/↓ 选择 + 回车打开（默认选中第一项），无本地结果时提供「在百度中搜索」兜底条目，回车/点击用默认浏览器打开百度搜索关键词。
 - 窗口宽高：≥640×400 校验，Rust 保存并即时应用，启动优先于默认布局。
 - 备份导入导出：zip 打包（`manifest.json`：format/version/exported_at/data）；导入校验后写回 SQLite（settings 走 set_settings）并刷新。
 - 重启应用：`restart_app` command。
@@ -198,7 +199,7 @@ Tests      72 passed
 pnpm build passed
 ```
 
-（2026-08-03 实测：`pnpm exec vitest run` 13 文件 / 72 用例全部通过，含侧栏拖拽、分组管理、链接与笔记 CRUD 交互、Tiptap 格式状态、localStorage/SQLite 数据层双路径读写与迁移、剪切板监听与 30 条裁剪、设置页全部开关/校验/快捷键绑定(点击录入组合键)/备份导入导出、快捷搜索页。另 `cargo test`（db.rs 2 用例）、`cargo check`、`cargo build` 通过；真实应用冒烟启动正常，SQLite 落盘与 settings.json 迁移已验证。）
+（2026-08-03 实测：`pnpm exec vitest run` 15 文件 / 94 用例全部通过，含侧栏拖拽、分组管理、链接与笔记 CRUD 交互、Tiptap 格式状态、localStorage/SQLite 数据层双路径读写与迁移、逐条 CRUD 命令（数据层 11 用例）、剪切板监听与 30 条裁剪、设置页全部开关/校验/快捷键绑定(点击录入组合键)/备份导入导出、快捷搜索页（键盘导航/百度兜底/失焦可用/路由隔离）。另 `cargo test`（db.rs 5 用例）、`cargo check`、`cargo build` 通过；真实应用冒烟启动正常，SQLite 落盘与 settings.json 迁移已验证。）
 
 该结果代表当前前端交互、数据层与系统级集成的验证基线；在线更新与安装包需首个 Release 后验证。
 
@@ -247,7 +248,7 @@ pnpm build passed
 ### 数据层
 
 - 图片与附件管理。
-- 逐条 CRUD 命令（当前为全量快照写，数据量大后可优化）。
+- ~~逐条 CRUD 命令（当前为全量快照写，数据量大后可优化）~~（2026-08-03 已完成：业务数据写入改为逐条命令，全量快照命令保留用于迁移/备份/切换库）。
 
 ### Windows 集成
 
@@ -274,7 +275,7 @@ pnpm build passed
 11. 前端存在少量备用资产/死代码：`GroupSelector` 组件、shadcn 的 `dropdown-menu`/`field`/`separator`、sonner Toaster（已挂载但无调用点），接入后续功能时可复用或清理。
 12. Tiptap 已接入但有两项已知限制：jsdom 环境无法模拟 contenteditable 输入（格式化测试只验证状态与切换同步，真实输入需在 tauri dev 中冒烟）；链接/图片当前用 `window.prompt` 输入地址（原型方案，后续可换 Dialog）。
 13. 剪切板监听采用 600ms 轮询（`arboard`）：复制相同文本不会重复入库（去重置顶）；图片/文件等非文本类型暂不入库；浏览器 dev 模式无系统监听，依赖手动添加入口。
-14. 数据层为「全量快照写」（每次变更替换整个模块数据）：个人数据量级下性能无虞，但数据量增长后可改为逐条 CRUD。
+14. 业务数据写入为逐条 CRUD 命令；`get_all_data`/`replace_all_data` 全量命令保留用于一次性迁移 / 备份导入导出 / 切换库（数据量增长后可再评估是否移除）。浏览器 dev 降级路径下，逐条写基于 localStorage 已有数据做增量，示例数据不再隐式落盘（属预期行为）。
 15. 更新机制已配置（GitHub Releases + 签名密钥），但尚未经过真实发布验证；首个 Release 需在仓库配置 `TAURI_SIGNING_PRIVATE_KEY` / `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` Secrets（见 `docs/RELEASE.md`）。
 
 ## 13. 推荐开发顺序
@@ -284,7 +285,7 @@ pnpm build passed
 3. ~~SQLite 数据层 + 设置入库 + 数据库路径生效~~（2026-08-03 已完成）。
 4. ~~快捷搜索独立窗口~~（2026-08-03 已完成）。
 5. 执行首个 Windows 发布（配置 Secrets → 打 tag → 验证自动更新）。
-6. 数据层逐条 CRUD 优化（数据量增长后）。
+6. ~~数据层逐条 CRUD 优化~~（2026-08-03 已完成）。
 7. 快捷搜索笔记结果联动主窗口导航。
 8. 图片与附件管理。
 

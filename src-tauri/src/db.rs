@@ -351,6 +351,176 @@ pub fn replace_all_data(state: State<'_, DbState>, data: AllData) -> Result<(), 
 }
 
 // ---------------------------------------------------------------------------
+// 逐条 CRUD（upsert = INSERT OR REPLACE，按主键 id 新增或更新单条）
+// 实现拆为内部函数（可单测）与 Tauri command 薄包装两层。
+// ---------------------------------------------------------------------------
+
+fn upsert_link_row(conn: &Connection, link: &LinkItem) -> Result<(), String> {
+    conn.execute(
+        "INSERT OR REPLACE INTO links (id, title, protocol, address, notes, group_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![link.id, link.title, link.protocol, link.address, link.notes, link.group_id],
+    )
+    .map_err(|e| format!("写入链接失败：{e}"))?;
+    Ok(())
+}
+
+fn delete_link_row(conn: &Connection, id: &str) -> Result<(), String> {
+    conn.execute("DELETE FROM links WHERE id = ?1", params![id])
+        .map_err(|e| format!("删除链接失败：{e}"))?;
+    Ok(())
+}
+
+fn upsert_link_group_row(conn: &Connection, group: &GroupItem) -> Result<(), String> {
+    conn.execute(
+        "INSERT OR REPLACE INTO link_groups (id, name) VALUES (?1, ?2)",
+        params![group.id, group.name],
+    )
+    .map_err(|e| format!("写入链接分组失败：{e}"))?;
+    Ok(())
+}
+
+/// 删除链接分组：事务内先把组内链接移到未分组（group_id → NULL），再删组。
+fn delete_link_group_tx(conn: &mut Connection, id: &str) -> Result<(), String> {
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    tx.execute(
+        "UPDATE links SET group_id = NULL WHERE group_id = ?1",
+        params![id],
+    )
+    .map_err(|e| e.to_string())?;
+    tx.execute("DELETE FROM link_groups WHERE id = ?1", params![id])
+        .map_err(|e| e.to_string())?;
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn upsert_note_row(conn: &Connection, note: &NoteItem) -> Result<(), String> {
+    conn.execute(
+        "INSERT OR REPLACE INTO notes (id, title, content, group_id, time)
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![note.id, note.title, note.content, note.group_id, note.time],
+    )
+    .map_err(|e| format!("写入笔记失败：{e}"))?;
+    Ok(())
+}
+
+fn delete_note_row(conn: &Connection, id: &str) -> Result<(), String> {
+    conn.execute("DELETE FROM notes WHERE id = ?1", params![id])
+        .map_err(|e| format!("删除笔记失败：{e}"))?;
+    Ok(())
+}
+
+fn upsert_note_group_row(conn: &Connection, group: &GroupItem) -> Result<(), String> {
+    conn.execute(
+        "INSERT OR REPLACE INTO note_groups (id, name) VALUES (?1, ?2)",
+        params![group.id, group.name],
+    )
+    .map_err(|e| format!("写入笔记分组失败：{e}"))?;
+    Ok(())
+}
+
+/// 删除笔记分组：事务内先把组内笔记移到未分组（group_id → NULL），再删组。
+fn delete_note_group_tx(conn: &mut Connection, id: &str) -> Result<(), String> {
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    tx.execute(
+        "UPDATE notes SET group_id = NULL WHERE group_id = ?1",
+        params![id],
+    )
+    .map_err(|e| e.to_string())?;
+    tx.execute("DELETE FROM note_groups WHERE id = ?1", params![id])
+        .map_err(|e| e.to_string())?;
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn upsert_clipboard_item_row(conn: &Connection, item: &ClipboardItem) -> Result<(), String> {
+    conn.execute(
+        "INSERT OR REPLACE INTO clipboard_items (id, text, created_at) VALUES (?1, ?2, ?3)",
+        params![item.id, item.text, item.created_at],
+    )
+    .map_err(|e| format!("写入剪切板条目失败：{e}"))?;
+    Ok(())
+}
+
+fn delete_clipboard_item_row(conn: &Connection, id: &str) -> Result<(), String> {
+    conn.execute("DELETE FROM clipboard_items WHERE id = ?1", params![id])
+        .map_err(|e| format!("删除剪切板条目失败：{e}"))?;
+    Ok(())
+}
+
+fn clear_clipboard_items_row(conn: &Connection) -> Result<(), String> {
+    conn.execute("DELETE FROM clipboard_items", [])
+        .map_err(|e| format!("清空剪切板失败：{e}"))?;
+    Ok(())
+}
+
+/// 新增 / 更新一条链接。
+#[tauri::command]
+pub fn upsert_link(state: State<'_, DbState>, link: LinkItem) -> Result<(), String> {
+    upsert_link_row(&state.conn.lock().unwrap(), &link)
+}
+
+/// 删除一条链接。
+#[tauri::command]
+pub fn delete_link(state: State<'_, DbState>, id: String) -> Result<(), String> {
+    delete_link_row(&state.conn.lock().unwrap(), &id)
+}
+
+/// 新增 / 更新一个链接分组。
+#[tauri::command]
+pub fn upsert_link_group(state: State<'_, DbState>, group: GroupItem) -> Result<(), String> {
+    upsert_link_group_row(&state.conn.lock().unwrap(), &group)
+}
+
+/// 删除链接分组：组内链接移到未分组后删组。
+#[tauri::command]
+pub fn delete_link_group(state: State<'_, DbState>, id: String) -> Result<(), String> {
+    delete_link_group_tx(&mut state.conn.lock().unwrap(), &id)
+}
+
+/// 新增 / 更新一条笔记。
+#[tauri::command]
+pub fn upsert_note(state: State<'_, DbState>, note: NoteItem) -> Result<(), String> {
+    upsert_note_row(&state.conn.lock().unwrap(), &note)
+}
+
+/// 删除一条笔记。
+#[tauri::command]
+pub fn delete_note(state: State<'_, DbState>, id: String) -> Result<(), String> {
+    delete_note_row(&state.conn.lock().unwrap(), &id)
+}
+
+/// 新增 / 更新一个笔记分组。
+#[tauri::command]
+pub fn upsert_note_group(state: State<'_, DbState>, group: GroupItem) -> Result<(), String> {
+    upsert_note_group_row(&state.conn.lock().unwrap(), &group)
+}
+
+/// 删除笔记分组：组内笔记移到未分组后删组。
+#[tauri::command]
+pub fn delete_note_group(state: State<'_, DbState>, id: String) -> Result<(), String> {
+    delete_note_group_tx(&mut state.conn.lock().unwrap(), &id)
+}
+
+/// 新增 / 更新一条剪切板历史条目。
+#[tauri::command]
+pub fn upsert_clipboard_item(state: State<'_, DbState>, item: ClipboardItem) -> Result<(), String> {
+    upsert_clipboard_item_row(&state.conn.lock().unwrap(), &item)
+}
+
+/// 删除一条剪切板历史条目。
+#[tauri::command]
+pub fn delete_clipboard_item(state: State<'_, DbState>, id: String) -> Result<(), String> {
+    delete_clipboard_item_row(&state.conn.lock().unwrap(), &id)
+}
+
+/// 清空全部剪切板历史。
+#[tauri::command]
+pub fn clear_clipboard_items(state: State<'_, DbState>) -> Result<(), String> {
+    clear_clipboard_items_row(&state.conn.lock().unwrap())
+}
+
+// ---------------------------------------------------------------------------
 // 数据库路径切换（设置变更时迁移数据）
 // ---------------------------------------------------------------------------
 
@@ -513,5 +683,158 @@ mod tests {
         assert_eq!(got.notes.len(), 0);
         assert_eq!(got.clipboard_items.len(), 0);
         assert_eq!(got.link_groups.len(), 0);
+    }
+
+    // ---- 逐条 CRUD ----
+
+    #[test]
+    fn upsert_link_inserts_updates_and_deletes_single_row() {
+        let state = memory_db();
+        let link = LinkItem {
+            id: "l1".into(),
+            title: "文档".into(),
+            protocol: "https".into(),
+            address: "example.com".into(),
+            notes: "".into(),
+            group_id: None,
+        };
+        {
+            let conn = state.conn.lock().unwrap();
+            upsert_link_row(&conn, &link).unwrap();
+        }
+
+        // 新增后可读
+        {
+            let mut conn = state.conn.lock().unwrap();
+            let tx = conn.transaction().unwrap();
+            let got = read_all(&tx).unwrap();
+            tx.commit().unwrap();
+            assert_eq!(got.links.len(), 1);
+            assert_eq!(got.links[0].title, "文档");
+        }
+
+        // 同 id 覆盖更新（title 变化，行数不变）
+        {
+            let conn = state.conn.lock().unwrap();
+            upsert_link_row(&conn, &LinkItem { title: "改名".into(), ..link.clone() }).unwrap();
+        }
+        {
+            let mut conn = state.conn.lock().unwrap();
+            let tx = conn.transaction().unwrap();
+            let got = read_all(&tx).unwrap();
+            tx.commit().unwrap();
+            assert_eq!(got.links.len(), 1);
+            assert_eq!(got.links[0].title, "改名");
+        }
+
+        // 删除后为空
+        {
+            let conn = state.conn.lock().unwrap();
+            delete_link_row(&conn, "l1").unwrap();
+        }
+        {
+            let mut conn = state.conn.lock().unwrap();
+            let tx = conn.transaction().unwrap();
+            let got = read_all(&tx).unwrap();
+            tx.commit().unwrap();
+            assert_eq!(got.links.len(), 0);
+        }
+    }
+
+    #[test]
+    fn delete_link_group_moves_links_to_ungrouped_before_deleting_group() {
+        let state = memory_db();
+        // 写入一个分组与两条组内链接
+        {
+            let conn = state.conn.lock().unwrap();
+            upsert_link_group_row(
+                &conn,
+                &GroupItem { id: "g1".into(), name: "工作".into() },
+            )
+            .unwrap();
+            upsert_link_row(
+                &conn,
+                &LinkItem {
+                    id: "l1".into(),
+                    title: "A".into(),
+                    protocol: "https".into(),
+                    address: "a.com".into(),
+                    notes: "".into(),
+                    group_id: Some("g1".into()),
+                },
+            )
+            .unwrap();
+            upsert_link_row(
+                &conn,
+                &LinkItem {
+                    id: "l2".into(),
+                    title: "B".into(),
+                    protocol: "https".into(),
+                    address: "b.com".into(),
+                    notes: "".into(),
+                    group_id: Some("g1".into()),
+                },
+            )
+            .unwrap();
+        }
+
+        // 删除分组 → 组内链接应移到未分组
+        {
+            let mut conn = state.conn.lock().unwrap();
+            delete_link_group_tx(&mut conn, "g1").unwrap();
+        }
+        {
+            let mut conn = state.conn.lock().unwrap();
+            let tx = conn.transaction().unwrap();
+            let got = read_all(&tx).unwrap();
+            tx.commit().unwrap();
+            assert_eq!(got.link_groups.len(), 0);
+            assert_eq!(got.links.len(), 2);
+            assert!(got.links.iter().all(|l| l.group_id.is_none()));
+        }
+    }
+
+    #[test]
+    fn clipboard_item_crud_and_clear() {
+        let state = memory_db();
+        let item = ClipboardItem {
+            id: "c1".into(),
+            text: "内容".into(),
+            created_at: 100,
+        };
+        {
+            let conn = state.conn.lock().unwrap();
+            upsert_clipboard_item_row(&conn, &item).unwrap();
+        }
+        {
+            let mut conn = state.conn.lock().unwrap();
+            let tx = conn.transaction().unwrap();
+            let got = read_all(&tx).unwrap();
+            tx.commit().unwrap();
+            assert_eq!(got.clipboard_items.len(), 1);
+        }
+        {
+            let conn = state.conn.lock().unwrap();
+            delete_clipboard_item_row(&conn, "c1").unwrap();
+        }
+        {
+            let mut conn = state.conn.lock().unwrap();
+            let tx = conn.transaction().unwrap();
+            let got = read_all(&tx).unwrap();
+            tx.commit().unwrap();
+            assert_eq!(got.clipboard_items.len(), 0);
+        }
+        {
+            let conn = state.conn.lock().unwrap();
+            upsert_clipboard_item_row(&conn, &item).unwrap();
+            clear_clipboard_items_row(&conn).unwrap();
+        }
+        {
+            let mut conn = state.conn.lock().unwrap();
+            let tx = conn.transaction().unwrap();
+            let got = read_all(&tx).unwrap();
+            tx.commit().unwrap();
+            assert_eq!(got.clipboard_items.len(), 0);
+        }
     }
 }

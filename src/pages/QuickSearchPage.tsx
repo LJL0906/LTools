@@ -19,6 +19,9 @@ interface SearchResult {
   url?: string;
 }
 
+/** 无本地结果时用百度搜索关键词（打开系统默认浏览器） */
+const BAIDU_SEARCH_URL = "https://www.baidu.com/s";
+
 /**
  * 快捷搜索独立窗口：全局搜索链接与笔记。
  * 由设置中的「快捷搜索快捷键」唤起（Rust 侧创建窗口并聚焦）。
@@ -28,6 +31,8 @@ export function QuickSearchPage() {
   const [links, setLinks] = useState<LinkItem[]>([]);
   const [notes, setNotes] = useState<NoteItem[]>([]);
   const [loaded, setLoaded] = useState(false);
+  // 键盘上下选择的条目索引（0 起；列表末尾为百度搜索兜底条目）
+  const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -129,6 +134,18 @@ export function QuickSearchPage() {
     return out.slice(0, 12);
   }, [links, notes, query]);
 
+  // 无本地结果时的百度搜索兜底条目（仅 query 非空且无结果时显示）
+  const baiduQuery = query.trim();
+  const showBaiduItem = baiduQuery !== "" && results.length === 0;
+  // 键盘导航条目总数 = 本地结果 + 百度兜底
+  const totalItems = results.length + (showBaiduItem ? 1 : 0);
+
+  // 输入变化时重置选中到第一项
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [query]);
+
+  /** 打开本地结果（链接走系统浏览器 / 笔记唤起主窗口） */
   const openResult = (result: SearchResult) => {
     if (result.kind === "link" && result.url) {
       // 链接：直接用系统默认浏览器打开
@@ -139,6 +156,49 @@ export function QuickSearchPage() {
     void invoke("open_note_in_main", { noteId: result.id }).catch(() => undefined);
   };
 
+  /** 打开当前选中条目（本地结果或百度搜索） */
+  const openActive = () => {
+    if (totalItems === 0) return;
+    const idx = Math.min(activeIndex, totalItems - 1);
+    if (idx < results.length) {
+      openResult(results[idx]);
+    } else if (showBaiduItem) {
+      const url = `${BAIDU_SEARCH_URL}?wd=${encodeURIComponent(baiduQuery)}`;
+      void openUrl(url).catch(() => undefined);
+    }
+  };
+
+  /**
+   * 键盘导航核心逻辑（↑/↓ 循环移动选中，Enter 打开选中项）。
+   * 同时服务于输入框 onKeyDown 与窗口级 keydown（输入框失焦后仍可用）。
+   */
+  const handleListKey = (key: string, preventDefault: () => void) => {
+    if (key === "ArrowDown") {
+      preventDefault();
+      if (totalItems > 0) setActiveIndex((i) => (i + 1) % totalItems);
+    } else if (key === "ArrowUp") {
+      preventDefault();
+      if (totalItems > 0) setActiveIndex((i) => (i - 1 + totalItems) % totalItems);
+    } else if (key === "Enter") {
+      preventDefault();
+      openActive();
+    }
+  };
+
+  const handleInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) =>
+    handleListKey(event.key, () => event.preventDefault());
+
+  // 窗口级键盘监听：输入框失焦（点击结果/空白区域）后 ↑/↓/Enter 仍生效；
+  // 焦点在输入框时由 onKeyDown 处理，避免重复触发。
+  useEffect(() => {
+    const onWindowKeyDown = (event: KeyboardEvent) => {
+      if (event.target === inputRef.current) return;
+      handleListKey(event.key, () => event.preventDefault());
+    };
+    window.addEventListener("keydown", onWindowKeyDown);
+    return () => window.removeEventListener("keydown", onWindowKeyDown);
+  }, [activeIndex, baiduQuery, results, showBaiduItem, totalItems]);
+
   return (
     <div className="quick-search">
       <div className="quick-search__input-row">
@@ -148,6 +208,7 @@ export function QuickSearchPage() {
           autoFocus
           className="quick-search__input"
           onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={handleInputKeyDown}
           placeholder="搜索链接或笔记…"
           ref={inputRef}
           value={query}
@@ -157,18 +218,21 @@ export function QuickSearchPage() {
 
       {query.trim() === "" ? (
         <div className="quick-search__placeholder">输入关键词开始搜索链接与笔记</div>
-      ) : results.length === 0 ? (
+      ) : totalItems === 0 ? (
         <div className="quick-search__placeholder">
           <SearchX aria-hidden="true" size={18} />
           没有找到匹配内容
         </div>
       ) : (
-        <ul className="quick-search__list">
-          {results.map((result) => (
+        <ul className="quick-search__list" role="listbox" aria-label="搜索结果">
+          {results.map((result, index) => (
             <li key={`${result.kind}-${result.id}`}>
               <button
-                className="quick-search__item"
+                aria-selected={index === activeIndex}
+                className={`quick-search__item${index === activeIndex ? " quick-search__item--active" : ""}`}
                 onClick={() => openResult(result)}
+                onMouseEnter={() => setActiveIndex(index)}
+                role="option"
                 type="button"
               >
                 <span className={`quick-search__badge quick-search__badge--${result.kind}`}>
@@ -181,6 +245,33 @@ export function QuickSearchPage() {
               </button>
             </li>
           ))}
+          {showBaiduItem && (
+            <li>
+              <button
+                aria-selected={results.length === activeIndex}
+                className={`quick-search__item quick-search__item--web${
+                  results.length === activeIndex ? " quick-search__item--active" : ""
+                }`}
+                onClick={() => {
+                  const url = `${BAIDU_SEARCH_URL}?wd=${encodeURIComponent(baiduQuery)}`;
+                  void openUrl(url).catch(() => undefined);
+                }}
+                onMouseEnter={() => setActiveIndex(results.length)}
+                role="option"
+                type="button"
+              >
+                <span className="quick-search__badge quick-search__badge--web">百度</span>
+                <span className="quick-search__item-body">
+                  <span className="quick-search__item-title">
+                    在百度中搜索「{baiduQuery}」
+                  </span>
+                  <span className="quick-search__item-subtitle">
+                    {BAIDU_SEARCH_URL}?wd={baiduQuery}
+                  </span>
+                </span>
+              </button>
+            </li>
+          )}
         </ul>
       )}
     </div>

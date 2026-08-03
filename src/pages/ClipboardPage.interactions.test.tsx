@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { listen, type Event, type UnlistenFn } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
 import App from "../App";
 import {
   CLIPBOARD_MAX_ITEMS,
@@ -9,7 +10,10 @@ import {
 } from "../features/clipboard/types";
 import { STORAGE_KEYS } from "../lib/storage";
 
+vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
+
 const mockedListen = vi.mocked(listen);
+const mockedInvoke = vi.mocked(invoke);
 
 describe("ClipboardPage interactions", () => {
   /** 模拟 Rust 侧系统剪贴板监听推送 */
@@ -17,6 +21,7 @@ describe("ClipboardPage interactions", () => {
 
   beforeEach(() => {
     localStorage.clear();
+    mockedInvoke.mockClear();
     window.history.replaceState({}, "", "/clipboard");
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
@@ -254,5 +259,122 @@ describe("ClipboardPage interactions", () => {
     render(<App />);
 
     expect(screen.getByText("恢复的历史条目")).toBeInTheDocument();
+  });
+
+  it("persists via per-item CRUD commands in the Tauri runtime", async () => {
+    // 模拟 Tauri 运行时：get_all_data 返回空库，其余命令返回 undefined
+    (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {};
+    mockedInvoke.mockImplementation((cmd: string) => {
+      if (cmd === "get_all_data") {
+        return Promise.resolve({
+          links: [],
+          linkGroups: [],
+          notes: [],
+          noteGroups: [],
+          clipboardItems: [],
+        });
+      }
+      return Promise.resolve(undefined);
+    });
+
+    try {
+      const user = userEvent.setup();
+      render(<App />);
+
+      // 等待首次加载（get_all_data 空库）完成，模拟真实时序：启动加载先于用户操作
+      await screen.findByText("剪切板为空");
+
+      // 监听推送新增 → upsert_clipboard_item
+      emitClipboard("CRUD 条目");
+      await screen.findByText("CRUD 条目");
+      expect(mockedInvoke).toHaveBeenCalledWith(
+        "upsert_clipboard_item",
+        expect.objectContaining({
+          item: expect.objectContaining({ text: "CRUD 条目" }),
+        }),
+      );
+
+      // 去重置顶：被挤掉的旧条目逐条删除
+      emitClipboard("另一条");
+      await screen.findByText("另一条");
+      emitClipboard("CRUD 条目");
+      await waitFor(() => {
+        expect(screen.getAllByText("CRUD 条目")).toHaveLength(1);
+      });
+      expect(mockedInvoke).toHaveBeenCalledWith(
+        "delete_clipboard_item",
+        expect.objectContaining({ id: expect.any(String) }),
+      );
+
+      // 单条删除 → delete_clipboard_item
+      const item = screen
+        .getByRole("button", { name: "复制 CRUD 条目" })
+        .closest("li");
+      expect(item).not.toBeNull();
+      await user.click(within(item as HTMLElement).getByRole("button", { name: "删除" }));
+      let dialog = screen.getByRole("dialog");
+      await user.click(within(dialog).getByRole("button", { name: "删除" }));
+      await waitFor(() => {
+        expect(screen.queryByText("CRUD 条目")).not.toBeInTheDocument();
+      });
+
+      // 清空全部 → clear_clipboard_items
+      emitClipboard("待清空条目");
+      await screen.findByText("待清空条目");
+      await user.click(screen.getByRole("button", { name: "清空全部" }));
+      dialog = screen.getByRole("dialog");
+      await user.click(within(dialog).getByRole("button", { name: "清空" }));
+      expect(screen.getByText("剪切板为空")).toBeInTheDocument();
+      expect(mockedInvoke).toHaveBeenCalledWith("clear_clipboard_items");
+    } finally {
+      delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
+    }
+  });
+
+  it("trims the oldest entries via per-item deletes in the Tauri runtime", async () => {
+    (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {};
+    mockedInvoke.mockImplementation((cmd: string) => {
+      if (cmd === "get_all_data") {
+        return Promise.resolve({
+          links: [],
+          linkGroups: [],
+          notes: [],
+          noteGroups: [],
+          clipboardItems: [],
+        });
+      }
+      return Promise.resolve(undefined);
+    });
+
+    try {
+      render(<App />);
+
+      // 等待首次加载完成，再推送监听事件（真实时序：启动加载先于剪贴板写入）
+      await screen.findByText("剪切板为空");
+
+      for (let i = 0; i < CLIPBOARD_MAX_ITEMS + 5; i++) {
+        emitClipboard(`裁剪内容 ${i}`);
+      }
+
+      await waitFor(() => {
+        expect(screen.getAllByRole("listitem")).toHaveLength(CLIPBOARD_MAX_ITEMS);
+      });
+      expect(screen.getByText(`裁剪内容 ${CLIPBOARD_MAX_ITEMS + 4}`)).toBeInTheDocument();
+      expect(screen.queryByText("裁剪内容 0")).not.toBeInTheDocument();
+
+      // 新增 35 条 → 35 次 upsert；超出 30 条上限 → 5 次裁剪删除
+      expect(
+        mockedInvoke.mock.calls.filter(
+          ([cmd]) => cmd === "upsert_clipboard_item",
+        ),
+      ).toHaveLength(CLIPBOARD_MAX_ITEMS + 5);
+      expect(
+        mockedInvoke.mock.calls.filter(
+          ([cmd]) => cmd === "delete_clipboard_item",
+        ),
+      ).toHaveLength(5);
+    } finally {
+      delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
+    }
   });
 });

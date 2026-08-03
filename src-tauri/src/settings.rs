@@ -120,7 +120,7 @@ fn normalize_shortcut(s: &str) -> String {
 }
 
 /// 应用全局快捷键：先注销全部，再按配置注册。
-/// - `global_shortcut`：唤起主窗口；
+/// - `global_shortcut`：切换主窗口显示 / 隐藏（toggle）；
 /// - `quick_search_shortcut`：唤起快捷搜索窗口。
 /// 注册失败（格式非法 / 被其他应用占用）返回错误信息。
 pub fn apply_global_shortcut(app: &AppHandle, settings: &AppSettings) -> Result<(), String> {
@@ -132,7 +132,7 @@ pub fn apply_global_shortcut(app: &AppHandle, settings: &AppSettings) -> Result<
         shortcuts
             .on_shortcut(shortcut.as_str(), |app, _shortcut, event| {
                 if event.state == ShortcutState::Pressed {
-                    show_main_window(app);
+                    toggle_main_window(app);
                 }
             })
             .map_err(|e| format!("全局快捷键 {shortcut} 注册失败：{e}"))?;
@@ -202,6 +202,22 @@ fn show_main_window<R: tauri::Runtime>(app: &AppHandle<R>) {
         let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();
+    }
+}
+
+/// 切换主窗口显示 / 隐藏（全局快捷键使用，显隐循环）：
+/// 窗口可见且未最小化 → 隐藏到托盘；隐藏/最小化 → 显示并聚焦。
+/// 注意：托盘图标与菜单仍用 `show_main_window`（只显示），避免误触隐藏。
+fn toggle_main_window<R: tauri::Runtime>(app: &AppHandle<R>) {
+    if let Some(window) = app.get_webview_window("main") {
+        let shown = window.is_visible().unwrap_or(false) && !window.is_minimized().unwrap_or(false);
+        if shown {
+            let _ = window.hide();
+        } else {
+            let _ = window.unminimize();
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
     }
 }
 

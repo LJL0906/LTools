@@ -44,6 +44,29 @@ describe("localStorage persistence", () => {
 
   it("persists link deletions to localStorage", async () => {
     window.history.replaceState({}, "", "/links");
+    // 预置两条链接：逐条 CRUD 基于 localStorage 已有数据做增量，
+    // 浏览器模式下示例数据不再隐式落盘（示例数据非用户数据）
+    localStorage.setItem(
+      STORAGE_KEYS.links,
+      JSON.stringify([
+        {
+          id: "d1",
+          title: "API 文档",
+          protocol: "https",
+          address: "example.com/api",
+          notes: "",
+          groupId: null,
+        },
+        {
+          id: "d2",
+          title: "其他链接",
+          protocol: "https",
+          address: "other.example.com",
+          notes: "",
+          groupId: null,
+        },
+      ]),
+    );
     const user = userEvent.setup();
     render(<App />);
 

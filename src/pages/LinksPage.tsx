@@ -50,7 +50,14 @@ import {
   type LinkItem,
 } from "../features/links/types";
 import { loadState, STORAGE_KEYS } from "../lib/storage";
-import { loadLinksData, isTauriRuntime, persistLinks } from "../lib/data";
+import {
+  deleteLink,
+  deleteLinkGroup,
+  loadLinksData,
+  isTauriRuntime,
+  upsertLink,
+  upsertLinkGroup,
+} from "../lib/data";
 
 const initialLinks: LinkItem[] = [
   {
@@ -212,11 +219,6 @@ export function LinksPage({ searchQuery = "" }: LinksPageProps) {
     };
   }, []);
 
-  /** 数据变更后持久化（Tauri → SQLite 快照写；浏览器 → localStorage 防抖） */
-  useEffect(() => {
-    persistLinks(links, groups);
-  }, [links, groups]);
-
   useEffect(() => {
     if (!copiedLinkId) return;
 
@@ -256,20 +258,21 @@ export function LinksPage({ searchQuery = "" }: LinksPageProps) {
   const hasSearchQuery = searchQuery.trim().length > 0;
 
   const saveNewLink = (draft: LinkDraft) => {
-    setLinks((currentLinks) => [
-      ...currentLinks,
-      { ...draft, id: crypto.randomUUID() },
-    ]);
+    const link: LinkItem = { ...draft, id: crypto.randomUUID() };
+    setLinks((currentLinks) => [...currentLinks, link]);
+    upsertLink(link);
     setIsAddingLink(false);
   };
 
   const saveEditedLink = (draft: LinkDraft) => {
     if (!editingLink) return;
+    const link: LinkItem = { ...draft, id: editingLink.id };
     setLinks((currentLinks) =>
-      currentLinks.map((link) =>
-        link.id === editingLink.id ? { ...draft, id: editingLink.id } : link,
+      currentLinks.map((item) =>
+        item.id === editingLink.id ? link : item,
       ),
     );
+    upsertLink(link);
     setEditingLink(null);
   };
 
@@ -519,6 +522,7 @@ export function LinksPage({ searchQuery = "" }: LinksPageProps) {
             message={`确定删除“${deletingLink.title}”？`}
             onCancel={() => setDeletingLink(null)}
             onConfirm={() => {
+              deleteLink(deletingLink.id);
               setLinks((currentLinks) =>
                 currentLinks.filter((link) => link.id !== deletingLink.id),
               );
@@ -532,10 +536,9 @@ export function LinksPage({ searchQuery = "" }: LinksPageProps) {
             mode="create"
             onCancel={() => setIsCreatingGroup(false)}
             onSave={(name) => {
-              setGroups((currentGroups) => [
-                ...currentGroups,
-                { id: crypto.randomUUID(), name },
-              ]);
+              const group: GroupItem = { id: crypto.randomUUID(), name };
+              setGroups((currentGroups) => [...currentGroups, group]);
+              upsertLinkGroup(group);
               setIsCreatingGroup(false);
             }}
             scope="links"
@@ -547,11 +550,13 @@ export function LinksPage({ searchQuery = "" }: LinksPageProps) {
             mode="rename"
             onCancel={() => setEditingGroup(null)}
             onSave={(name) => {
+              const group: GroupItem = { ...editingGroup, name };
               setGroups((currentGroups) =>
-                currentGroups.map((group) =>
-                  group.id === editingGroup.id ? { ...group, name } : group,
+                currentGroups.map((item) =>
+                  item.id === editingGroup.id ? group : item,
                 ),
               );
+              upsertLinkGroup(group);
               setEditingGroup(null);
             }}
             scope="links"
@@ -562,6 +567,7 @@ export function LinksPage({ searchQuery = "" }: LinksPageProps) {
             group={deletingGroup}
             onCancel={() => setDeletingGroup(null)}
             onConfirm={() => {
+              deleteLinkGroup(deletingGroup.id);
               setGroups((currentGroups) =>
                 currentGroups.filter((group) => group.id !== deletingGroup.id),
               );

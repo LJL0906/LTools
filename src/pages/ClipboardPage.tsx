@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { Eye, Inbox, Plus, SearchX, Trash2 } from "lucide-react";
@@ -25,7 +25,13 @@ import {
   type ClipboardEntry,
 } from "../features/clipboard/types";
 import { loadState, STORAGE_KEYS } from "../lib/storage";
-import { loadClipboardData, isTauriRuntime, persistClipboard } from "../lib/data";
+import {
+  clearClipboardItems,
+  deleteClipboardItem,
+  isTauriRuntime,
+  loadClipboardData,
+  upsertClipboardItem,
+} from "../lib/data";
 
 export function ClipboardPage() {
   const { searchQuery } = useOutletContext<AppOutletContext>();
@@ -39,6 +45,8 @@ export function ClipboardPage() {
   const [isClearing, setIsClearing] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [copyErrorId, setCopyErrorId] = useState<string | null>(null);
+  /** 最新 entries 引用：事件回调内同步读取，避免基于过期闭包计算增量变更 */
+  const entriesRef = useRef<ClipboardEntry[]>(entries);
 
   /** 首次加载：Tauri 用 SQLite 数据覆盖初始值（含一次性迁移）；浏览器初始值即最终值 */
   useEffect(() => {
@@ -47,15 +55,17 @@ export function ClipboardPage() {
     void loadClipboardData().then((dbEntries) => {
       if (disposed) return;
       setEntries(dbEntries);
+      // 同步 ref，避免加载完成前到达的监听事件基于过期快照计算增量
+      entriesRef.current = dbEntries;
     });
     return () => {
       disposed = true;
     };
   }, []);
 
-  /** 数据变更后持久化（Tauri → SQLite 快照写；浏览器 → localStorage 防抖） */
+  /** 保持 ref 与内存态同步（初次加载 / 其它 setEntries 调用后刷新） */
   useEffect(() => {
-    persistClipboard(entries);
+    entriesRef.current = entries;
   }, [entries]);
 
   useEffect(() => {
@@ -75,26 +85,34 @@ export function ClipboardPage() {
   /**
    * 新增一条剪贴板记录：
    * - 与最新一条相同则跳过（防监听循环与重复添加）
-   * - 同文本已有条目则去重置顶
-   * - 最多保留 CLIPBOARD_MAX_ITEMS 条，超出裁剪最旧
+   * - 同文本已有条目则去重置顶（旧条目逐条删除）
+   * - 最多保留 CLIPBOARD_MAX_ITEMS 条，超出裁剪最旧（逐条删除）
    */
   const addEntry = useCallback((rawText: string) => {
     const text = truncateClipboardText(rawText.trim());
     if (!text) return;
 
-    setEntries((prev) => {
-      if (prev.length > 0 && prev[0].text === text) return prev;
+    const prev = entriesRef.current;
+    if (prev.length > 0 && prev[0].text === text) return;
 
-      const entry: ClipboardEntry = {
-        id: crypto.randomUUID(),
-        text,
-        createdAt: Date.now(),
-      };
-      return [entry, ...prev.filter((e) => e.text !== text)].slice(
-        0,
-        CLIPBOARD_MAX_ITEMS,
-      );
-    });
+    const entry: ClipboardEntry = {
+      id: crypto.randomUUID(),
+      text,
+      createdAt: Date.now(),
+    };
+    const rest = prev.filter((e) => e.text !== text);
+    const next = [entry, ...rest].slice(0, CLIPBOARD_MAX_ITEMS);
+
+    // 逐条持久化：新增条目写库；被去重置顶挤掉的旧条目与超出上限的最旧条目逐条删除
+    upsertClipboardItem(entry);
+    const evicted = [
+      ...prev.filter((e) => e.text === text),
+      ...rest.slice(CLIPBOARD_MAX_ITEMS - 1),
+    ];
+    evicted.forEach((e) => deleteClipboardItem(e.id));
+
+    entriesRef.current = next;
+    setEntries(next);
   }, []);
 
   /** 接收 Rust 侧系统剪贴板监听推送（非 Tauri 环境静默） */
@@ -132,13 +150,16 @@ export function ClipboardPage() {
 
   const confirmDelete = () => {
     if (!deletingEntry) return;
-    setEntries((currentEntries) =>
-      currentEntries.filter((e) => e.id !== deletingEntry.id),
-    );
+    deleteClipboardItem(deletingEntry.id);
+    const next = entriesRef.current.filter((e) => e.id !== deletingEntry.id);
+    entriesRef.current = next;
+    setEntries(next);
     setDeletingEntry(null);
   };
 
   const confirmClear = () => {
+    clearClipboardItems();
+    entriesRef.current = [];
     setEntries([]);
     setIsClearing(false);
   };

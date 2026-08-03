@@ -1563,9 +1563,16 @@
 }
 
 .quick-search__item:hover,
-.quick-search__item:focus-visible {
+.quick-search__item:focus-visible,
+.quick-search__item--active,
+.quick-search__item--active:hover {
   background: var(--color-bg-active);
   outline: none;
+}
+
+.quick-search__badge--web {
+  background: #e8f0fe;
+  color: #1a56db;
 }
 
 .quick-search__badge {
