@@ -48,6 +48,39 @@ pnpm tauri build
 
 ## 3. 发版流程
 
+### 3.1 一键发布（推荐）
+
+前置：安装并登录 `gh` CLI（一次性）：
+
+```powershell
+winget install GitHub.cli
+gh auth login
+```
+
+然后一条命令完成「改版本号 → 推送 → 打 tag → 等 Actions → 发布 Draft → 验证」：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File release.ps1 0.1.2
+```
+
+参数说明：
+
+| 参数 | 作用 |
+|---|---|
+| `0.1.2`（必填） | 目标版本号，格式 `x.y.z`，必须高于已发布版本 |
+| `-DryRun` | 演练模式：只打印将要执行的操作，不做任何实际改动 |
+| `-Force` | 跳过「git 工作区必须干净」检查（慎用） |
+| `-SkipPush` | 已推送过 tag，只做等待 Actions + 发布（调试用） |
+
+脚本注意事项：
+
+- 要求 git 工作区干净（有未提交改动会中止，防止误提交无关文件）。
+- 自动校验两处版本号一致（`tauri.conf.json` + `package.json`）。
+- 构建在 GitHub Actions 云端完成（脚本不本地打包，本地打包见第 0 节）。
+- Actions 失败 / 30 分钟超时 / Draft 发布失败都会以非零退出码中止。
+
+### 3.2 手动发版（等价于脚本内部步骤）
+
 ```powershell
 git tag v0.1.1
 git push origin v0.1.1
