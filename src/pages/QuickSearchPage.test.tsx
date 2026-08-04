@@ -257,6 +257,18 @@ describe("QuickSearchPage", () => {
     });
   });
 
+  it("invokes open_main_window when the open-main button is clicked", async () => {
+    mockTauri();
+    const user = userEvent.setup();
+    render(<QuickSearchPage />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "打开主窗口" }),
+    );
+
+    expect(mockedInvoke).toHaveBeenCalledWith("open_main_window");
+  });
+
   it("focuses the input whenever the quick-search-shown event fires", async () => {
     mockTauri();
     let emitShown: () => void;

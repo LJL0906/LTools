@@ -211,6 +211,17 @@ pub fn open_note_in_main(app: AppHandle, note_id: String) -> Result<(), String> 
     Ok(())
 }
 
+/// 从快捷搜索窗口唤起主窗口（取消最小化 → 显示 → 聚焦）并隐藏快捷搜索窗口。
+/// 与 `open_note_in_main` 的区别：不携带目标内容，仅作为「进入主窗口」入口。
+#[tauri::command]
+pub fn open_main_window(app: AppHandle) -> Result<(), String> {
+    show_main_window(&app);
+    if let Some(window) = app.get_webview_window("search") {
+        let _ = window.hide();
+    }
+    Ok(())
+}
+
 /// 显示主窗口（取消最小化 → 显示 → 聚焦）。
 fn show_main_window<R: tauri::Runtime>(app: &AppHandle<R>) {
     if let Some(window) = app.get_webview_window("main") {

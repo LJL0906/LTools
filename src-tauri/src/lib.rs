@@ -27,6 +27,7 @@ pub fn run() {
             settings::export_backup,
             settings::import_backup,
             settings::open_note_in_main,
+            settings::open_main_window,
             db::get_all_data,
             db::replace_all_data,
             // 逐条 CRUD（upsert = 新增或更新单条）

@@ -677,13 +677,15 @@
 }
 
 .note-editor {
-  min-height: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .note-editor__title-row {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-4) var(--space-4) var(--space-2);
@@ -694,7 +696,7 @@
   min-width: 0;
   flex: 1;
   margin: 0;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   line-height: 1.4;
   letter-spacing: -0.3px;
@@ -717,8 +719,9 @@
 .editor-toolbar {
   min-height: 38px;
   display: flex;
+  flex-shrink: 0;
   align-items: center;
-  margin: 0 var(--space-4) var(--space-3);
+  margin: 0 var(--space-4) 0;
   padding: var(--space-1) 3px;
   overflow: hidden;
   border: 1px solid var(--color-border-soft);
@@ -765,9 +768,10 @@
 .note-editor__content {
   flex: 1;
   min-height: 0;
-  padding: 0 var(--space-4) var(--space-4);
+  overflow-y: auto;
+  padding: var(--space-4);
   color: #363b42;
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.65;
 }
 
@@ -869,17 +873,17 @@
 }
 
 .note-editor__content .ProseMirror h1 {
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 700;
 }
 
 .note-editor__content .ProseMirror h2 {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 700;
 }
 
 .note-editor__content .ProseMirror h3 {
-  font-size: 17px;
+  font-size: 15px;
   font-weight: 600;
 }
 
@@ -1475,6 +1479,7 @@
   gap: var(--space-2);
   padding: 0 var(--space-2);
   height: 38px;
+  flex-shrink: 0; /* 列表较长时保证输入行高度恒定为 38px，不被压缩 */
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: #fff;
@@ -1508,6 +1513,26 @@
   box-shadow: none;
 }
 
+.quick-search__open-main {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.quick-search__open-main:hover {
+  background: #f7f9fc;
+  color: var(--color-primary);
+}
+
 .quick-search__hint {
   flex-shrink: 0;
   font-size: 11px;
@@ -1537,6 +1562,8 @@
   margin: var(--space-3) 0 0;
   padding: 0;
   list-style: none;
+  flex: 1; /* 占据输入行固定后的剩余空间 */
+  min-height: 0; /* 允许收缩，配合 overflow-y: auto 在列表内部滚动 */
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -1894,6 +1921,7 @@
 .json-panel__actions {
   flex: 0 0 auto;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
 }
@@ -1979,77 +2007,54 @@
   padding-bottom: 0;
 }
 
-/* JSON 语法高亮配色（Prism token，与项目色板一致） */
-.json-panel__output .token.property {
-  color: var(--color-primary);
-}
-.json-panel__output .token.string {
-  color: #2e7d32;
-}
-.json-panel__output .token.number {
-  color: #7c3aed;
-}
-.json-panel__output .token.boolean,
-.json-panel__output .token.null {
-  color: #b45309;
-}
-.json-panel__output .token.punctuation,
-.json-panel__output .token.operator {
-  color: var(--color-text-secondary);
+/* 树视图（@uiw/react-json-view）行缩进由 indentWidth 像素实现，无需保留空白折叠 */
+.json-panel__output.w-rjv {
+  white-space: normal;
 }
 
-/* ---- JSON 折叠树视图 ---- */
-.json-tree {
-  font-family: "Cascadia Code", Consolas, monospace;
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.json-tree__line {
+/* 预览列（搜索框 + 树）：搜索框固定高度，树独占剩余空间 */
+.json-panel__preview {
+  flex: 1;
+  min-height: 0;
   display: flex;
-  align-items: baseline;
-  white-space: pre;
-  border-radius: var(--radius-sm);
+  flex-direction: column;
+  gap: var(--space-2);
 }
 
-.json-tree__line--container:hover {
-  background: var(--color-bg-active);
-}
-
-.json-tree__toggle {
+.json-panel__search {
   flex: 0 0 auto;
-  width: 16px;
-  height: 16px;
-  margin-right: 2px;
-  padding: 0;
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--color-text-secondary);
-  font-size: 10px;
-  line-height: 1;
-  cursor: pointer;
+  gap: var(--space-2);
 }
 
-/* 箭头用伪元素渲染：按钮无文本节点，保证树的 textContent 与格式化文本一致 */
-.json-tree__toggle::before {
-  content: "▾";
-}
-
-.json-tree__toggle[aria-pressed="true"]::before {
-  content: "▸";
-}
-
-.json-tree__toggle:hover {
-  background: rgba(0, 0, 0, 0.08);
+.json-panel__search-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 4px 8px;
+  border: 1px solid #d9dbe0;
+  border-radius: var(--radius-md);
+  background: #fff;
   color: var(--color-text);
 }
 
-.json-tree__toggle:focus-visible {
-  outline: 1px solid var(--color-primary);
+.json-panel__search-count {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+/* 主题切换按钮组：与操作按钮同色系，分组间距 */
+.json-panel__theme {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-left: var(--space-1);
+  padding-left: var(--space-2);
+  border-left: 1px solid #d9dbe0;
 }
 
 .json-panel__error {

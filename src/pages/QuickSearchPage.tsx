@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { Search, SearchX } from "lucide-react";
+import { Search, SearchX, ExternalLink } from "lucide-react";
 import { getAllData } from "../lib/data";
 import { isTauriRuntime } from "../lib/data";
 import type { LinkItem } from "../features/links/types";
@@ -297,6 +297,17 @@ export function QuickSearchPage() {
           ref={inputRef}
           value={query}
         />
+        <button
+          aria-label="打开主窗口"
+          className="quick-search__open-main"
+          onClick={() => {
+            void invoke("open_main_window").catch(() => undefined);
+          }}
+          title="打开主窗口"
+          type="button"
+        >
+          <ExternalLink aria-hidden="true" size={14} />
+        </button>
         <kbd className="quick-search__hint">Esc 关闭</kbd>
       </div>
 

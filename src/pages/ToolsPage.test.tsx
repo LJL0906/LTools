@@ -38,18 +38,22 @@ describe("ToolsPage JSON 工具", () => {
     localStorage.clear();
   });
 
-  it("formats valid JSON with indentation by default (debounced)", async () => {
+  it("renders a collapsible tree view by default (debounced)", async () => {
     render(<ToolsPage />);
     await waitForReady();
 
     setInput(VALID_JSON);
 
     await waitFor(() => {
-      // 树视图行尾带换行文本节点，trim 后与格式化输出一致
-      expect(document.querySelector(".json-panel__output")?.textContent?.trim()).toBe(
-        PRETTY_JSON,
-      );
+      // @uiw/react-json-view 树视图渲染成功
+      expect(
+        document.querySelector(".json-panel__output .w-rjv-inner"),
+      ).not.toBeNull();
     });
+    const text = document.querySelector(".json-panel__output")?.textContent ?? "";
+    expect(text).toContain("a");
+    expect(text).toContain("b");
+    expect(text).toContain("1");
   });
 
   it("shows an error for invalid JSON without crashing", async () => {
@@ -73,8 +77,8 @@ describe("ToolsPage JSON 工具", () => {
     setInput(PRETTY_JSON);
     await waitFor(() => {
       expect(
-        document.querySelector(".json-panel__output")?.textContent?.trim(),
-      ).toBe(PRETTY_JSON);
+        document.querySelector(".json-panel__output .w-rjv-inner"),
+      ).not.toBeNull();
     });
 
     await user.click(screen.getByRole("button", { name: "压缩" }));
@@ -112,7 +116,9 @@ describe("ToolsPage JSON 工具", () => {
 
     setInput(VALID_JSON);
     await waitFor(() => {
-      expect(document.querySelector(".json-panel__output .json-tree")).not.toBeNull();
+      expect(
+        document.querySelector(".json-panel__output .w-rjv-inner"),
+      ).not.toBeNull();
     });
 
     await user.click(screen.getByRole("button", { name: "一键清空" }));
@@ -120,7 +126,7 @@ describe("ToolsPage JSON 工具", () => {
     // 输入立即清空（受控）；预览结果经 300ms 防抖后重置为占位（容器保留）
     expect(screen.getByRole("textbox", { name: "JSON 输入" })).toHaveValue("");
     await waitFor(() => {
-      expect(document.querySelector(".json-panel__output .json-tree")).toBeNull();
+      expect(document.querySelector(".json-panel__output .w-rjv-inner")).toBeNull();
       expect(screen.getByText("等待输入…")).toBeInTheDocument();
     });
   });
@@ -305,69 +311,69 @@ describe("ToolsPage JSON 工具", () => {
     expect(screen.queryByRole("textbox", { name: "页签名称" })).toBeNull();
   });
 
-  it("highlights JSON tokens in the preview output", async () => {
+  it("highlights JSON values with type tokens in the preview output", async () => {
     render(<ToolsPage />);
     await waitForReady();
 
-    // 含 string / number / boolean / null / property 全部 token 类型
+    // 含 string / int / bool / null 全部值类型
     setInput('{"name":"ltools","count":2,"active":true,"extra":null}');
 
     await waitFor(() => {
       const output = document.querySelector(".json-panel__output");
       expect(output).not.toBeNull();
-      expect(output?.querySelector(".token.property")).not.toBeNull();
-      expect(output?.querySelector(".token.string")).not.toBeNull();
-      expect(output?.querySelector(".token.number")).not.toBeNull();
-      expect(output?.querySelector(".token.boolean")).not.toBeNull();
-      expect(output?.querySelector(".token.null")).not.toBeNull();
+      expect(
+        output?.querySelector('.w-rjv-value[data-type="string"]'),
+      ).not.toBeNull();
+      expect(output?.querySelector('.w-rjv-value[data-type="int"]')).not.toBeNull();
+      expect(output?.querySelector('.w-rjv-value[data-type="bool"]')).not.toBeNull();
+      expect(output?.querySelector('.w-rjv-value[data-type="null"]')).not.toBeNull();
     });
-    // 高亮不改变可见文本
-    expect(document.querySelector(".json-panel__output")?.textContent?.trim()).toBe(
-      '{\n  "name": "ltools",\n  "count": 2,\n  "active": true,\n  "extra": null\n}',
-    );
+    // 高亮不改变可见文本：键名与值均可见
+    const text = document.querySelector(".json-panel__output")?.textContent ?? "";
+    expect(text).toContain("name");
+    expect(text).toContain("ltools");
   });
 
-  it("keeps preview text byte-identical to JSON.stringify for nested containers", async () => {
+  it("renders nested containers in the tree view", async () => {
     render(<ToolsPage />);
     await waitForReady();
 
-    // 嵌套容器（对象/数组）作为非末项时，逗号必须落在闭合行尾而非开行后
+    // 嵌套容器（对象/数组）逐层渲染，键名与值可见
     setInput('{"user":{"name":"a"},"list":[1,2]}');
 
     await waitFor(() => {
       expect(
-        document.querySelector(".json-panel__output")?.textContent?.trim(),
-      ).toBe(
-        '{\n  "user": {\n    "name": "a"\n  },\n  "list": [\n    1,\n    2\n  ]\n}',
-      );
+        document.querySelector(".json-panel__output .w-rjv-inner"),
+      ).not.toBeNull();
     });
+    const text = document.querySelector(".json-panel__output")?.textContent ?? "";
+    expect(text).toContain("user");
+    expect(text).toContain("name");
+    expect(text).toContain("list");
   });
 
-  it("collapses and expands a single container by clicking its toggle", async () => {
+  it("collapses and expands a single container by clicking its key", async () => {
     const user = userEvent.setup();
     render(<ToolsPage />);
     await waitForReady();
 
     setInput('{"user":{"name":"a"},"list":[1,2]}');
     await waitFor(() => {
-      expect(document.querySelector(".json-tree__line--container")).not.toBeNull();
+      expect(
+        document.querySelector(".json-panel__output .w-rjv-inner"),
+      ).not.toBeNull();
     });
+    const output = document.querySelector(".json-panel__output");
+    expect(output).not.toBeNull();
 
-    // 折叠 user 容器：子节点行消失，折叠行出现
-    await user.click(screen.getByRole("button", { name: '折叠 "user"' }));
-    expect(screen.getByRole("button", { name: '展开 "user"' })).toBeInTheDocument();
-    expect(
-      document.querySelector(".json-panel__output")?.textContent,
-    ).toContain('"user": { … }');
-    expect(
-      document.querySelector(".json-panel__output")?.textContent,
-    ).not.toContain('"name"');
+    // 点击 user 容器行 → 子节点隐藏，容器行仍在
+    await user.click(screen.getByText("user"));
+    expect(output?.textContent).not.toContain("name");
+    expect(output?.textContent).toContain("user");
 
-    // 展开恢复全部内容
-    await user.click(screen.getByRole("button", { name: '展开 "user"' }));
-    expect(
-      document.querySelector(".json-panel__output")?.textContent,
-    ).toContain('"name": "a"');
+    // 再次点击 → 内容恢复
+    await user.click(screen.getByText("user"));
+    expect(output?.textContent).toContain("name");
   });
 
   it("collapses and expands all containers with the action buttons", async () => {
@@ -377,23 +383,29 @@ describe("ToolsPage JSON 工具", () => {
 
     setInput('{"user":{"name":"a"},"list":[1,2]}');
     await waitFor(() => {
-      expect(document.querySelector(".json-tree__line--container")).not.toBeNull();
+      expect(
+        document.querySelector(".json-panel__output .w-rjv-inner"),
+      ).not.toBeNull();
     });
-
-    // 一键折叠全部：根 + user + list 全部折叠，只剩三行折叠行
-    await user.click(screen.getByRole("button", { name: "折叠全部" }));
     const output = document.querySelector(".json-panel__output");
-    expect(output?.textContent).toContain("{ … }");
-    expect(output?.textContent).not.toContain('"name"');
+    expect(output).not.toBeNull();
+
+    // 一键折叠全部：根容器折叠，所有子节点隐藏
+    // （按钮触发树重挂载，DOM 引用会变化，需每次重新查询）
+    await user.click(screen.getByRole("button", { name: "折叠全部" }));
+    await waitFor(() => {
+      const text = document.querySelector(".json-panel__output")?.textContent ?? "";
+      expect(text).not.toContain("name");
+      expect(text).not.toContain("user");
+    });
 
     // 一键展开全部：内容全部恢复
     await user.click(screen.getByRole("button", { name: "展开全部" }));
-    expect(
-      document.querySelector(".json-panel__output")?.textContent,
-    ).toContain('"name": "a"');
-    expect(
-      document.querySelector(".json-panel__output")?.textContent,
-    ).toContain("1");
+    await waitFor(() => {
+      const text = document.querySelector(".json-panel__output")?.textContent ?? "";
+      expect(text).toContain("name");
+      expect(text).toContain("1");
+    });
   });
 
   it("copies the full formatted JSON even when parts are collapsed", async () => {
@@ -404,15 +416,100 @@ describe("ToolsPage JSON 工具", () => {
 
     setInput('{"user":{"name":"a"},"list":[1,2]}');
     await waitFor(() => {
-      expect(document.querySelector(".json-tree__line--container")).not.toBeNull();
+      expect(
+        document.querySelector(".json-panel__output .w-rjv-inner"),
+      ).not.toBeNull();
     });
 
     // 折叠若干节点后复制：内容仍是完整格式化 JSON
-    await user.click(screen.getByRole("button", { name: '折叠 "user"' }));
+    await user.click(screen.getByText("user"));
     await user.click(screen.getByRole("button", { name: "一键复制" }));
 
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
       '{\n  "user": {\n    "name": "a"\n  },\n  "list": [\n    1,\n    2\n  ]\n}',
+    );
+  });
+
+  it("copies clean formatted JSON when selecting the tree preview", async () => {
+    render(<ToolsPage />);
+    await waitForReady();
+
+    setInput(VALID_JSON);
+    await waitFor(() => {
+      expect(
+        document.querySelector(".json-panel__output .w-rjv-inner"),
+      ).not.toBeNull();
+    });
+
+    // 框选/全选预览区 Ctrl+C 走 onCopy 拦截：写入干净的格式化文本而非 DOM 碎片
+    const output = document.querySelector(".json-panel__output");
+    expect(output).not.toBeNull();
+    const clipboardData = { setData: vi.fn() };
+    const event = new Event("copy", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", { value: clipboardData });
+    fireEvent(output as Element, event);
+
+    expect(clipboardData.setData).toHaveBeenCalledWith("text/plain", PRETTY_JSON);
+  });
+
+  it("searches keys and values and expands matching paths", async () => {
+    const user = userEvent.setup();
+    render(<ToolsPage />);
+    await waitForReady();
+
+    setInput('{"user":{"name":"a"},"list":[1,2]}');
+    await waitFor(() => {
+      expect(
+        document.querySelector(".json-panel__output .w-rjv-inner"),
+      ).not.toBeNull();
+    });
+
+    // 搜索 "name"：匹配 1 处；匹配路径展开、未匹配的 list 折叠
+    await user.type(screen.getByRole("textbox", { name: "JSON 搜索" }), "name");
+    await waitFor(() => {
+      expect(screen.getByText("匹配 1 处")).toBeInTheDocument();
+    });
+    const text = document.querySelector(".json-panel__output")?.textContent ?? "";
+    expect(text).toContain("name");
+    expect(text).not.toContain("1");
+
+    // 无匹配关键词：提示无匹配，内容折叠
+    await user.clear(screen.getByRole("textbox", { name: "JSON 搜索" }));
+    await user.type(screen.getByRole("textbox", { name: "JSON 搜索" }), "zzz");
+    await waitFor(() => {
+      expect(screen.getByText("无匹配")).toBeInTheDocument();
+    });
+    expect(
+      document.querySelector(".json-panel__output")?.textContent,
+    ).not.toContain("user");
+  });
+
+  it("switches the tree theme via the theme buttons", async () => {
+    const user = userEvent.setup();
+    render(<ToolsPage />);
+    await waitForReady();
+
+    setInput(VALID_JSON);
+    await waitFor(() => {
+      expect(
+        document.querySelector(".json-panel__output .w-rjv-inner"),
+      ).not.toBeNull();
+    });
+
+    await user.click(screen.getByRole("button", { name: "暗色" }));
+    expect(screen.getByRole("button", { name: "暗色" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "亮色" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+
+    await user.click(screen.getByRole("button", { name: "VSCode" }));
+    expect(screen.getByRole("button", { name: "VSCode" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
     );
   });
 });
