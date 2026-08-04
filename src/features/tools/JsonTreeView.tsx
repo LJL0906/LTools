@@ -104,7 +104,7 @@ function TreeNode({
 
   return (
     <>
-      {/* 容器开行（含折叠态） */}
+      {/* 容器行：展开态逗号在闭合行尾；折叠态折叠行即开+闭，逗号在行尾 */}
       <div className="json-tree__line json-tree__line--container">
         <span className="json-tree__indent">{indent}</span>
         <button
@@ -114,10 +114,16 @@ function TreeNode({
           onClick={() => onToggle(node)}
           type="button"
         />
-        <Tokenized text={`${containerOpenText(node, isCollapsed)}${trailing}`} />
+        <Tokenized
+          text={
+            isCollapsed
+              ? `${containerOpenText(node, true)}${trailing}`
+              : containerOpenText(node, false)
+          }
+        />
       </div>
       {"\n"}
-      {/* 展开时递归渲染子节点 + 闭合行 */}
+      {/* 展开时递归渲染子节点 + 闭合行（非末项行尾补 `,`，与 JSON.stringify 一致） */}
       {!isCollapsed ? (
         <>
           {node.children.map((child, index) => (
@@ -132,7 +138,7 @@ function TreeNode({
           ))}
           <div className="json-tree__line">
             <span className="json-tree__indent">{indent}</span>
-            <Tokenized text={close} />
+            <Tokenized text={`${close}${trailing}`} />
           </div>
           {"\n"}
         </>

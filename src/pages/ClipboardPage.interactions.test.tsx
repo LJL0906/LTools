@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { listen, type Event, type UnlistenFn } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import App from "../App";
@@ -8,6 +8,7 @@ import {
   CLIPBOARD_MAX_ITEMS,
   CLIPBOARD_CHANGED_EVENT,
 } from "../features/clipboard/types";
+import { resetClipboardWatcherForTests } from "../lib/data";
 import { STORAGE_KEYS } from "../lib/storage";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
@@ -18,6 +19,14 @@ const mockedInvoke = vi.mocked(invoke);
 describe("ClipboardPage interactions", () => {
   /** 模拟 Rust 侧系统剪贴板监听推送 */
   let emitClipboard: (text: string) => void;
+
+  afterEach(() => {
+    // watcher 模块级状态（itemsCache / latestText / 订阅者 / started）跨用例
+    // 残留会导致去重与裁剪断言不稳定；在测试文件内重置（不要在 setup.ts
+    // import watcher——setupFiles 先于测试文件执行，会实例化出 mock 之外的
+    // 另一份模块图，使 @tauri-apps/api 的 vi.mock 对 watcher 链失效）
+    resetClipboardWatcherForTests();
+  });
 
   beforeEach(() => {
     localStorage.clear();

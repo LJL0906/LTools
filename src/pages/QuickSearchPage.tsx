@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
@@ -42,25 +42,47 @@ export function QuickSearchPage() {
   // 键盘上下选择的条目索引（0 起；列表末尾为百度搜索兜底条目）
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  // 结果/历史列表容器：键盘选中项超出可视区时滚动跟随
+  const listRef = useRef<HTMLUListElement>(null);
+  // 数据刷新请求序号：连续唤起窗口时丢弃过期响应，避免旧快照覆盖新数据
+  const loadSeqRef = useRef(0);
+  // 组件挂载标记：卸载后丢弃未完成的异步加载结果
+  const mountedRef = useRef(false);
 
   // 历史变更时持久化（打开条目是低频操作，直接同步写入）
   useEffect(() => {
     saveState(STORAGE_KEYS.searchHistory, history);
   }, [history]);
 
+  // 组件挂载标记：卸载后丢弃未完成的异步数据加载结果
   useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  /**
+   * 拉取最新数据快照（SQLite 实时读，无缓存）。
+   * 快捷搜索窗口常驻（隐藏后复用），组件只挂载一次；主窗口更新数据后，
+   * 每次窗口被唤起（显示 / 聚焦）都必须重新拉取，否则搜索仍基于旧快照。
+   */
+  const refreshData = useCallback(() => {
     if (!isTauriRuntime()) return;
-    let disposed = false;
+    const seq = ++loadSeqRef.current;
     void getAllData().then((all) => {
-      if (disposed) return;
+      // 组件已卸载或已有更新的请求在途：丢弃过期响应
+      if (!mountedRef.current || loadSeqRef.current !== seq) return;
       setLinks(all.links);
       setNotes(all.notes);
       setLoaded(true);
     });
-    return () => {
-      disposed = true;
-    };
   }, []);
+
+  // 挂载时加载一次（首次唤起免白屏；之后每次唤起由显示 / 聚焦事件负责刷新）
+  useEffect(() => {
+    refreshData();
+  }, [refreshData]);
 
   // 每次窗口获得焦点（快捷键唤起 / 任务栏点击 / 程序化显示）都聚焦输入框
   useEffect(() => {
@@ -74,6 +96,8 @@ export function QuickSearchPage() {
             // 每次唤起都视为全新搜索：清空输入，回到「最近使用」历史列表
             setQuery("");
             inputRef.current?.focus();
+            // 主窗口可能已更新数据，重新拉取最新快照
+            refreshData();
           }
         })
         .then((fn) => {
@@ -101,6 +125,8 @@ export function QuickSearchPage() {
       // 每次窗口显示都清空输入并聚焦，展示「最近使用」历史
       setQuery("");
       inputRef.current?.focus();
+      // 主窗口可能已更新数据，重新拉取最新快照
+      refreshData();
     })
       .then((fn) => {
         if (disposed) fn();
@@ -164,6 +190,13 @@ export function QuickSearchPage() {
   useEffect(() => {
     setActiveIndex(0);
   }, [query]);
+
+  // 选中项变化时滚动跟随：仅当选中项在可视区外才滚动（block: "nearest" 保证最小滚动距离）
+  useEffect(() => {
+    listRef.current
+      ?.querySelector(".quick-search__item--active")
+      ?.scrollIntoView({ block: "nearest" });
+  }, [activeIndex]);
 
   /** 记录一条打开历史：去重置顶，只保留最新 MAX_HISTORY 条 */
   const recordHistory = (result: SearchResult) => {
@@ -271,7 +304,7 @@ export function QuickSearchPage() {
         history.length > 0 ? (
           <>
             <div className="quick-search__section-title">最近使用</div>
-            <ul className="quick-search__list" role="listbox" aria-label="最近使用">
+            <ul className="quick-search__list" ref={listRef} role="listbox" aria-label="最近使用">
               {history.map(renderResultItem)}
             </ul>
           </>
@@ -284,7 +317,7 @@ export function QuickSearchPage() {
           没有找到匹配内容
         </div>
       ) : (
-        <ul className="quick-search__list" role="listbox" aria-label="搜索结果">
+        <ul className="quick-search__list" ref={listRef} role="listbox" aria-label="搜索结果">
           {results.map(renderResultItem)}
           {showBaiduItem && (
             <li>

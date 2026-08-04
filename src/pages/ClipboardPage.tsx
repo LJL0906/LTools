@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useOutletContext } from "react-router-dom";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { Eye, Inbox, Plus, SearchX, Trash2 } from "lucide-react";
 import type { AppOutletContext } from "../components/layout/AppShell";
 import { Button as CompatButton } from "../components/ui/Button";
@@ -19,11 +18,14 @@ import {
   TooltipTrigger,
 } from "@/components/shadcn/ui/tooltip";
 import {
-  CLIPBOARD_CHANGED_EVENT,
   CLIPBOARD_MAX_ITEMS,
   truncateClipboardText,
   type ClipboardEntry,
 } from "../features/clipboard/types";
+import {
+  markClipboardWrittenByApp,
+  subscribeClipboardChanges,
+} from "../lib/data";
 import { loadState, STORAGE_KEYS } from "../lib/storage";
 import {
   clearClipboardItems,
@@ -115,31 +117,28 @@ export function ClipboardPage() {
     setEntries(next);
   }, []);
 
-  /** 接收 Rust 侧系统剪贴板监听推送（非 Tauri 环境静默） */
+  /**
+   * 订阅全局剪贴板监听：新条目入库后直接在内存合并（存储写入走防抖，
+   * 重载读回的是落盘前旧值）。监听注册在应用级（features/clipboard/watcher.ts），
+   * 离开本页不丢失。
+   */
   useEffect(() => {
-    let unlisten: UnlistenFn | undefined;
-    let disposed = false;
-
-    void listen<string>(CLIPBOARD_CHANGED_EVENT, (event) => {
-      addEntry(event.payload);
-    })
-      .then((fn) => {
-        if (disposed) fn();
-        else unlisten = fn;
-      })
-      .catch(() => {
-        // 浏览器 dev 模式 / 测试环境无 Tauri 监听，静默降级为手动添加
-      });
-
-    return () => {
-      disposed = true;
-      unlisten?.();
-    };
-  }, [addEntry]);
+    const unsubscribe = subscribeClipboardChanges((entry) => {
+      const prev = entriesRef.current;
+      if (prev.length > 0 && prev[0].text === entry.text) return;
+      const rest = prev.filter((e) => e.text !== entry.text);
+      const next = [entry, ...rest].slice(0, CLIPBOARD_MAX_ITEMS);
+      entriesRef.current = next;
+      setEntries(next);
+    });
+    return unsubscribe;
+  }, []);
 
   const copyEntry = async (entry: ClipboardEntry) => {
     try {
       await navigator.clipboard.writeText(entry.text);
+      // 标记本应用写回，抑制全局监听把同文本再次入库（防监听回环）
+      markClipboardWrittenByApp(entry.text);
       setCopyErrorId(null);
       setCopiedId(entry.id);
     } catch {

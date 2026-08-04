@@ -2,6 +2,7 @@
 import { Outlet, useLocation } from "react-router-dom";
 import { TopNavigation } from "./TopNavigation";
 import { flushPendingSaves } from "../../lib/storage";
+import { startClipboardWatcher } from "../../lib/data";
 
 const searchPlaceholders: Record<string, string | undefined> = {
   "/links": "搜索链接",
@@ -20,6 +21,11 @@ export function AppShell() {
   useEffect(() => {
     setSearchQuery("");
   }, [pathname]);
+
+  // 系统剪贴板监听与页面路由无关：应用级启动一次，任意页面复制都自动入库
+  useEffect(() => {
+    startClipboardWatcher();
+  }, []);
 
   // 防抖保存的兜底：关窗/切后台/卸载时强制落盘，避免丢最近 200ms 的输入
   useEffect(() => {

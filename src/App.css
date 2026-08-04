@@ -1974,6 +1974,9 @@
 .json-panel__output {
   background: #f7f8fa;
   color: var(--color-text);
+  /* JSON 内容上下贴边：去掉容器自身上下内边距（左右保留） */
+  padding-top: 0;
+  padding-bottom: 0;
 }
 
 /* JSON 语法高亮配色（Prism token，与项目色板一致） */
@@ -1999,7 +2002,7 @@
 .json-tree {
   font-family: "Cascadia Code", Consolas, monospace;
   font-size: 13px;
-  line-height: 1.6;
+  line-height: 1.5;
 }
 
 .json-tree__line {

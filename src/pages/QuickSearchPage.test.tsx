@@ -283,6 +283,58 @@ describe("QuickSearchPage", () => {
     expect(document.activeElement).toBe(input);
   });
 
+  it("refreshes data from the database when the window is shown again", async () => {
+    mockTauri();
+    let emitShown: () => void;
+    mockedListen.mockImplementation((event, handler) => {
+      if (event === "quick-search-shown") {
+        emitShown = () =>
+          handler({ event, id: 0, payload: null } as Event<null>);
+      }
+      return Promise.resolve(() => undefined as unknown as UnlistenFn);
+    });
+
+    const user = userEvent.setup();
+    render(<QuickSearchPage />);
+
+    // 首次唤起：能搜到初始数据
+    await user.type(
+      await screen.findByRole("textbox", { name: "快捷搜索" }),
+      "API",
+    );
+    expect(await screen.findByText("API 文档")).toBeInTheDocument();
+
+    // 主窗口更新了数据（模拟数据库新增链接），随后再次唤起快捷搜索
+    mockedInvoke.mockImplementation((cmd: string) => {
+      if (cmd === "get_all_data") {
+        return Promise.resolve({
+          ...DB_DATA,
+          links: [
+            ...DB_DATA.links,
+            {
+              id: "l2",
+              title: "新链接",
+              protocol: "https",
+              address: "new.example.com",
+              notes: "",
+              groupId: null,
+            },
+          ],
+        });
+      }
+      return Promise.resolve(undefined);
+    });
+
+    // 再次显示窗口：应重新拉取数据，不再基于旧快照
+    await act(async () => {
+      emitShown();
+    });
+
+    await user.clear(screen.getByRole("textbox", { name: "快捷搜索" }));
+    await user.type(screen.getByRole("textbox", { name: "快捷搜索" }), "新链接");
+    expect(await screen.findByText("新链接")).toBeInTheDocument();
+  });
+
   it("shows recently opened items when the query is empty, badges distinguish links and notes", async () => {
     mockTauri();
     const user = userEvent.setup();

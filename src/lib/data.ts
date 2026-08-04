@@ -10,7 +10,13 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import type { ClipboardEntry } from "../features/clipboard/types";
+import {
+  CLIPBOARD_CHANGED_EVENT,
+  CLIPBOARD_MAX_ITEMS,
+  truncateClipboardText,
+} from "../features/clipboard/types";
 import type { GroupItem } from "../features/groups/types";
 import type { LinkItem } from "../features/links/types";
 import type { NoteItem } from "../features/notes/types";
@@ -415,4 +421,133 @@ export function clearClipboardItems(): void {
     return;
   }
   mutateLocalArray<ClipboardEntry>(STORAGE_KEYS.clipboardItems, () => []);
+}
+
+// ---------------------------------------------------------------------------
+// 系统剪贴板全局监听（与页面路由无关）
+//
+// Rust 侧（src-tauri/src/clipboard.rs）后台线程轮询系统剪贴板，文本变化时
+// 通过 `clipboard-changed` 事件推送；此处注册一次应用级监听，无论用户停留
+// 在哪个页面，复制/剪切的内容都会自动入库。页面通过
+// subscribeClipboardChanges 订阅"新条目已入库"通知刷新列表。
+//
+// 注意：测试基建（setup.ts 的 vi.mock）对 @tauri-apps/api 的 mock 只对
+// 测试文件直接依赖链生效，因此本逻辑必须留在 data.ts（页面链），不要
+// 拆到独立新文件，否则 Tauri invoke 在测试中会退化为真实模块。
+// ---------------------------------------------------------------------------
+
+/** 最近一次由本应用写入系统剪贴板的文本（复制历史条目回剪贴板时抑制监听回环） */
+let lastWrittenByApp: string | null = null;
+
+/** 最近一次监听到的文本（相同内容不重复入库） */
+let latestText: string | null = null;
+
+/**
+ * 最近一次入库后的条目列表（内存缓存）。
+ * 去重置顶 / 裁剪基于该缓存，不依赖读回存储：
+ * 存储写入走防抖、且部分环境（测试 mock）读回的是旧值或空值。
+ */
+let itemsCache: ClipboardEntry[] | null = null;
+
+/** 页面订阅者：收到"新条目已入库"通知后刷新列表 */
+const clipboardSubscribers = new Set<(entry: ClipboardEntry) => void>();
+
+async function currentClipboardItems(): Promise<ClipboardEntry[]> {
+  if (itemsCache === null) {
+    itemsCache = await loadClipboardData();
+  }
+  return itemsCache;
+}
+
+/** 入库串行队列：避免并发 ingest 基于同一份缓存快照互相覆盖 */
+let ingestQueue: Promise<unknown> = Promise.resolve();
+
+/** 记录本应用写入系统剪贴板的文本，用于抑制监听回环 */
+export function markClipboardWrittenByApp(text: string): void {
+  lastWrittenByApp = text;
+}
+
+/** 订阅"剪贴板新条目已入库"通知（回调携带新条目，页面直接在内存合并）；返回取消订阅函数 */
+export function subscribeClipboardChanges(
+  listener: (entry: ClipboardEntry) => void,
+): () => void {
+  clipboardSubscribers.add(listener);
+  return () => {
+    clipboardSubscribers.delete(listener);
+  };
+}
+
+/**
+ * 处理一条来自系统剪贴板监听的文本（入队串行执行）：
+ * 去重（相同文本 / 本应用刚写回的内容）→ 入库 → 去重置顶 → 裁剪超限 → 通知订阅者。
+ * 返回新条目；未产生新条目时返回 null。
+ *
+ * 注：存储写入走防抖（saveStateDebounced），订阅者应直接用回调携带的 entry
+ * 更新内存态，不要依赖立即重载存储（读回的是落盘前的旧值）。
+ *
+ * 页面手动添加走页面自己的 addEntry（基于内存快照），与这里的存储级
+ * 去重置顶是两套独立实现；正确性互不依赖，仅"手动添加后立刻复制相同文本"
+ * 这类边缘时序行为略有差异。
+ */
+export function ingestClipboardText(
+  rawText: string,
+): Promise<ClipboardEntry | null> {
+  const run = ingestQueue.then(() => doIngestClipboard(rawText));
+  ingestQueue = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
+async function doIngestClipboard(rawText: string): Promise<ClipboardEntry | null> {
+  const text = truncateClipboardText(rawText.trim());
+  if (!text || text === latestText || text === lastWrittenByApp) return null;
+  latestText = text;
+
+  const entry: ClipboardEntry = {
+    id: crypto.randomUUID(),
+    text,
+    createdAt: Date.now(),
+  };
+
+  // 基于内存缓存去重置顶 + 裁剪（条目 id 用于逐条删除，幂等无害）
+  const all = await currentClipboardItems();
+  all.filter((e) => e.text === text).forEach((e) => deleteClipboardItem(e.id));
+  const rest = all.filter((e) => e.text !== text);
+  rest
+    .slice(CLIPBOARD_MAX_ITEMS - 1)
+    .forEach((e) => deleteClipboardItem(e.id));
+  const next = [entry, ...rest].slice(0, CLIPBOARD_MAX_ITEMS);
+  itemsCache = next;
+
+  upsertClipboardItem(entry);
+  clipboardSubscribers.forEach((listener) => listener(entry));
+  return entry;
+}
+
+let clipboardWatcherStarted = false;
+
+/** 注册 Rust 侧剪贴板监听（应用级调用一次；非 Tauri 环境静默降级） */
+export function startClipboardWatcher(): void {
+  if (clipboardWatcherStarted) return;
+  clipboardWatcherStarted = true;
+  void listen<string>(CLIPBOARD_CHANGED_EVENT, (event) => {
+    void ingestClipboardText(event.payload);
+  }).catch(() => {
+    // 浏览器 dev / 测试环境无 Tauri 监听，静默降级为手动添加
+  });
+}
+
+/**
+ * 仅测试使用：重置模块级状态，避免用例间互相污染
+ * （itemsCache / latestText / 订阅者等跨用例残留会导致去重与裁剪断言不稳定）。
+ */
+export function resetClipboardWatcherForTests(): void {
+  lastWrittenByApp = null;
+  latestText = null;
+  itemsCache = null;
+  clipboardSubscribers.clear();
+  clipboardWatcherStarted = false;
+  ingestQueue = Promise.resolve();
 }

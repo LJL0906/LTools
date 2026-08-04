@@ -327,6 +327,22 @@ describe("ToolsPage JSON 工具", () => {
     );
   });
 
+  it("keeps preview text byte-identical to JSON.stringify for nested containers", async () => {
+    render(<ToolsPage />);
+    await waitForReady();
+
+    // 嵌套容器（对象/数组）作为非末项时，逗号必须落在闭合行尾而非开行后
+    setInput('{"user":{"name":"a"},"list":[1,2]}');
+
+    await waitFor(() => {
+      expect(
+        document.querySelector(".json-panel__output")?.textContent?.trim(),
+      ).toBe(
+        '{\n  "user": {\n    "name": "a"\n  },\n  "list": [\n    1,\n    2\n  ]\n}',
+      );
+    });
+  });
+
   it("collapses and expands a single container by clicking its toggle", async () => {
     const user = userEvent.setup();
     render(<ToolsPage />);
