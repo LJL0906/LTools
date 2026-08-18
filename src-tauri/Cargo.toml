@@ -1,6 +1,6 @@
 [package]
 name = "ltools"
-version = "0.1.4"
+version = "0.1.6"
 description = "A local-first Windows productivity tool"
 authors = []
 edition = "2021"

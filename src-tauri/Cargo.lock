@@ -2601,7 +2601,7 @@ dependencies = [
 
 [[package]]
 name = "ltools"
-version = "0.1.4"
+version = "0.1.6"
 dependencies = [
  "arboard",
  "image",
