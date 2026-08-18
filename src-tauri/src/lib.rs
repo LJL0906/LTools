@@ -2,7 +2,14 @@ mod clipboard;
 mod db;
 mod settings;
 
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
+
 use tauri::{Manager, WindowEvent};
+
+/// 快捷搜索窗口的拖动状态：记录最近一次窗口移动（拖动标题栏）的时间。
+/// 用于区分「点击窗口外部失焦」（应隐藏）与「拖动窗口标题栏失焦」（不应隐藏）。
+struct SearchWindowDragState(Mutex<Option<Instant>>);
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -50,6 +57,8 @@ pub fn run() {
             // 初始化 SQLite 数据层：先打开默认引导库（设置存于其中）
             let db_state = db::init(app.handle())?;
             app.manage(db_state);
+            // 快捷搜索窗口拖动状态（区分「点击外部失焦」与「拖动标题栏失焦」）
+            app.manage(SearchWindowDragState(Mutex::new(None)));
 
             // 读取并缓存设置（窗口尺寸 / 托盘 / 快捷键行为由设置驱动；
             // 若配置了自定义数据库路径则在此切换到目标库）
@@ -120,9 +129,44 @@ pub fn run() {
                     }
                 }
                 WindowEvent::Focused(false) => {
-                    // 快捷搜索窗口失焦（点击窗口外部区域）→ 立即隐藏
+                    // 快捷搜索窗口失焦（点击窗口外部区域）→ 延迟隐藏。
+                    // 拖动窗口标题栏也会先失焦：若失焦后窗口发生了移动（正在拖动），
+                    // 则豁免隐藏，避免「拖拽面板时窗口立即消失」。
                     if window.label() == "search" {
-                        let _ = window.hide();
+                        let blur_at = Instant::now();
+                        let app = window.app_handle().clone();
+                        std::thread::spawn(move || {
+                            std::thread::sleep(Duration::from_millis(200));
+                            let dragging = match app.try_state::<SearchWindowDragState>() {
+                                Some(state) => {
+                                    let guard = state.0.lock().unwrap();
+                                    match *guard {
+                                        Some(moved_at) => {
+                                            moved_at >= blur_at
+                                                && moved_at.elapsed() < Duration::from_secs(2)
+                                        }
+                                        None => false,
+                                    }
+                                }
+                                None => false,
+                            };
+                            if dragging {
+                                return; // 正在拖动窗口，不隐藏
+                            }
+                            if let Some(window) = app.get_webview_window("search") {
+                                if !window.is_focused().unwrap_or(false) {
+                                    let _ = window.hide();
+                                }
+                            }
+                        });
+                    }
+                }
+                // 快捷搜索窗口被拖动（标题栏拖拽移动）时记录时间，用于失焦隐藏豁免
+                WindowEvent::Moved(_) => {
+                    if window.label() == "search" {
+                        if let Some(state) = window.app_handle().try_state::<SearchWindowDragState>() {
+                            *state.0.lock().unwrap() = Some(Instant::now());
+                        }
                     }
                 }
                 // 主窗口任务栏按钮规则：显示期间不占任务栏（skipTaskbar），
