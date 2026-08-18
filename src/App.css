@@ -797,9 +797,15 @@
   font-size: 13px;
   font-weight: 500;
   text-align: left;
+  cursor: grab; /* 提示可拖拽排序 */
+  touch-action: none; /* Pointer Events 拖拽不被触摸/滚动抢占 */
   transition:
     color 120ms ease,
     background-color 120ms ease;
+}
+
+.note-list-item:active {
+  cursor: grabbing;
 }
 
 .note-list-item strong {
@@ -820,8 +826,8 @@
 }
 
 /* 拖拽中的条目半透明提示 */
-.note-list-item.is-dragging {
-  opacity: 0.5;
+.notes-sidebar__item.is-dragging {
+  opacity: 0.55;
 }
 
 .note-editor {

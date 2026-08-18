@@ -291,25 +291,67 @@ describe("notes CRUD persistence (Tauri per-record commands)", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("reorders notes by dragging onto another item", async () => {
+  it("reorders notes by dragging a row onto another item", async () => {
     renderNotesPage();
     await screen.findByRole("button", { name: "项目会议记录" });
 
-    const firstLi = screen.getByRole("button", { name: "项目会议记录" }).closest("li") as HTMLElement;
-    const third = screen.getByRole("button", { name: "发布检查清单" }).closest("li") as HTMLElement;
+    const first = screen.getByRole("button", { name: "项目会议记录" });
+    const third = screen.getByRole("button", { name: "发布检查清单" });
+    // jsdom 的 getBoundingClientRect 全为 0：按行顺序 mock 出纵向坐标，
+    // 使 pointermove 的 clientY 能命中对应行
+    const rows = Array.from(
+      document.querySelectorAll<HTMLElement>("li[data-note-id]"),
+    );
+    rows.forEach((row, index) => {
+      row.getBoundingClientRect = () =>
+        ({
+          top: index * 34,
+          bottom: (index + 1) * 34,
+          left: 0,
+          right: 200,
+          width: 200,
+          height: 34,
+          x: 0,
+          y: index * 34,
+          toJSON: () => ({}),
+        }) as DOMRect;
+    });
 
-    fireEvent.dragStart(firstLi, {
-      dataTransfer: { setData: () => undefined, effectAllowed: "" },
-    });
-    fireEvent.dragOver(third, {
-      dataTransfer: { dropEffect: "" },
-    });
-    fireEvent.drop(third, {
-      dataTransfer: { getData: () => "meeting" },
-    });
-    fireEvent.dragEnd(firstLi);
+    // 模拟 Pointer Events 拖拽：pointerdown → 位移超过阈值激活 → 移动到目标行 → pointerup。
+    // jsdom 的 PointerEvent 构造器丢弃 clientY/movementY，故用原生 Event + 手动赋值属性
+    const firePointer = (
+      target: Element,
+      type: string,
+      init: Record<string, unknown>,
+    ) => {
+      const event = new Event(type, { bubbles: true });
+      Object.assign(event, init);
+      fireEvent(target, event);
+    };
 
-    // 把第一项拖到第三项上方 → 插到第三项之前，顺序为 接口排查记录 / 发布检查清单 / 项目会议记录
+    firePointer(first, "pointerdown", {
+      button: 0,
+      pointerId: 1,
+      movementX: 0,
+      movementY: 0,
+    });
+    firePointer(first, "pointermove", {
+      pointerId: 1,
+      clientX: 0,
+      clientY: 0,
+      movementX: 0,
+      movementY: 8, // 超过 4px 阈值，激活拖拽
+    });
+    firePointer(third, "pointermove", {
+      pointerId: 1,
+      clientX: 0,
+      clientY: 80, // 命中第三项所在行（top 68 ~ bottom 102）
+      movementX: 0,
+      movementY: 4,
+    });
+    firePointer(first, "pointerup", { pointerId: 1 });
+
+    // 第一项被拖到第三项之前：接口排查记录 / 发布检查清单 / 项目会议记录
     await waitFor(() => {
       const items = screen
         .getAllByRole("button")

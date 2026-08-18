@@ -54,16 +54,17 @@ interface NotesSidebarProps {
   onCloseMenu: () => void;
   onCreateNote: () => void;
   onDeleteNote: (noteId: string) => void;
-  onDragEnd: () => void;
-  onDragOver: (noteId: string) => (event: React.DragEvent<HTMLLIElement>) => void;
-  onDragStart: (noteId: string) => (event: React.DragEvent<HTMLLIElement>) => void;
-  onDrop: (event: React.DragEvent<HTMLLIElement>) => void;
   onOpenMenu: (noteId: string) => void;
   onRenameNote: (noteId: string) => void;
+  onRowPointerCancel: () => void;
+  onRowPointerDown: (noteId: string) => (event: React.PointerEvent<HTMLButtonElement>) => void;
+  onRowPointerMove: (event: React.PointerEvent<HTMLButtonElement>) => void;
+  onRowPointerUp: () => void;
   onSelectNote: (noteId: string) => void;
+  sidebarListRef: React.RefObject<HTMLUListElement | null>;
 }
 
-/** 笔记侧栏：扁平笔记列表（无分组层级），支持拖拽排序，条目右侧操作菜单 */
+/** 笔记侧栏：扁平笔记列表（无分组层级），标题行按住拖动排序，条目右侧操作菜单 */
 function NotesSidebar({
   activeNoteId,
   draggingNoteId,
@@ -72,13 +73,14 @@ function NotesSidebar({
   onCloseMenu,
   onCreateNote,
   onDeleteNote,
-  onDragEnd,
-  onDragOver,
-  onDragStart,
-  onDrop,
   onOpenMenu,
   onRenameNote,
+  onRowPointerCancel,
+  onRowPointerDown,
+  onRowPointerMove,
+  onRowPointerUp,
   onSelectNote,
+  sidebarListRef,
 }: NotesSidebarProps) {
   return (
     <div className="notes-sidebar">
@@ -88,24 +90,24 @@ function NotesSidebar({
       </div>
 
       {notes.length > 0 ? (
-        <ul className="notes-sidebar__list" role="list" aria-label="笔记列表">
+        <ul className="notes-sidebar__list" ref={sidebarListRef} role="list" aria-label="笔记列表">
           {notes.map((note) => (
             <li
-              className="notes-sidebar__item"
-              draggable
+              className={`notes-sidebar__item${draggingNoteId === note.id ? " is-dragging" : ""}`}
+              data-note-id={note.id}
               key={note.id}
-              onDragEnd={onDragEnd}
-              onDragOver={onDragOver(note.id)}
-              onDragStart={onDragStart(note.id)}
-              onDrop={onDrop}
             >
               <button
                 aria-current={note.id === activeNoteId ? "true" : undefined}
                 aria-label={note.title}
                 className={`note-list-item${
                   note.id === activeNoteId ? " is-active" : ""
-                }${draggingNoteId === note.id ? " is-dragging" : ""}`}
+                }`}
                 onClick={() => onSelectNote(note.id)}
+                onPointerCancel={onRowPointerCancel}
+                onPointerDown={onRowPointerDown(note.id)}
+                onPointerMove={onRowPointerMove}
+                onPointerUp={onRowPointerUp}
                 type="button"
               >
                 <strong>{note.title}</strong>
@@ -149,12 +151,17 @@ export function NotesPage() {
   const [menuNoteId, setMenuNoteId] = useState<string | null>(null);
   const [renamingNote, setRenamingNote] = useState<NoteItem | null>(null);
   const [isDeletingNote, setIsDeletingNote] = useState(false);
-  // 拖拽排序中被拖起的笔记 id（用于高亮与去重）
+  // 拖拽排序中被拖起的笔记 id（用于高亮；Pointer Events 自实现，不依赖原生 DnD）
   const [draggingNoteId, setDraggingNoteId] = useState<string | null>(null);
-  // 拖拽过程中用 ref 记录状态：HTML5 拖拽的事件回调里读取 state 会拿到旧值，
-  // 且 dragover 阶段频繁触发，用 ref 可避免多余渲染
-  const draggedIdRef = useRef<string | null>(null);
-  const dragOverIdRef = useRef<string | null>(null);
+  // 拖拽过程状态（ref 避免高频 pointermove 触发渲染；active 区分「点击」与「拖拽」）
+  const dragStateRef = useRef<{ id: string; active: boolean } | null>(null);
+  // 笔记列表容器：拖拽时通过它遍历条目行做命中检测
+  const sidebarListRef = useRef<HTMLUListElement>(null);
+  // notes 镜像：pointerup 落定持久化时读取最新顺序（handler 闭包可能滞后）
+  const notesRef = useRef(notes);
+  useEffect(() => {
+    notesRef.current = notes;
+  }, [notes]);
 
   // 快捷搜索选中的目标笔记（来自 open-note 事件）：选中并保证可见
   const { targetNoteId, consumeTarget } = useNoteTarget();
@@ -222,48 +229,58 @@ export function NotesPage() {
   }, []);
 
   // -------------------------------------------------------------------------
-  // 拖拽排序：拖动期间不重排（保持 DOM 稳定，避免 dragover 事件链被打断，
-  // dropEffect 被重置导致光标显示禁用）；drop 松手时一次性落定排序。
+  // 拖拽排序（Pointer Events 自实现，替代原生 HTML5 DnD）：
+  // 按下标题行开始候选拖拽，移动超过阈值激活拖拽，期间按指针位置实时重排，
+  // 松手落定并持久化。完全自控光标样式（grab / grabbing），不会出现禁用光标。
   // -------------------------------------------------------------------------
-  const handleDragStart =
-    (noteId: string) => (event: React.DragEvent<HTMLLIElement>) => {
-      draggedIdRef.current = noteId;
-      setDraggingNoteId(noteId);
-      event.dataTransfer?.setData("text/plain", noteId);
-      if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+  const handleRowPointerDown =
+    (noteId: string) => (event: React.PointerEvent<HTMLButtonElement>) => {
+      if (event.button !== 0) return; // 仅左键
+      if (menuNoteId) setMenuNoteId(null); // 收起可能打开的菜单
+      dragStateRef.current = { id: noteId, active: false };
+      event.currentTarget.setPointerCapture(event.pointerId);
     };
 
-  const handleDragOver =
-    (targetId: string) => (event: React.DragEvent<HTMLLIElement>) => {
-      // 必须 preventDefault 才允许 HTML5 拖拽投放（否则 dropEffect 为 none → 禁用光标）
-      event.preventDefault();
-      if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
-      dragOverIdRef.current = targetId;
+  const handleRowPointerMove =
+    (event: React.PointerEvent<HTMLButtonElement>) => {
+      const drag = dragStateRef.current;
+      if (!drag) return;
+      // 移动超过阈值才视为拖拽，避免与单击选中冲突
+      if (!drag.active) {
+        if (Math.abs(event.movementY) < 4 && Math.abs(event.movementX) < 4) return;
+        drag.active = true;
+        setDraggingNoteId(drag.id);
+      }
+      // 找指针当前所在的条目行，把被拖项移到该行之前
+      const rows = Array.from(
+        sidebarListRef.current?.querySelectorAll<HTMLLIElement>("[data-note-id]") ?? [],
+      );
+      let targetId: string | null = null;
+      for (const row of rows) {
+        const rect = row.getBoundingClientRect();
+        if (event.clientY >= rect.top && event.clientY <= rect.bottom) {
+          targetId = row.getAttribute("data-note-id");
+          break;
+        }
+      }
+      if (!targetId || targetId === drag.id) return;
+      const from = notesRef.current.findIndex((n) => n.id === drag.id);
+      const to = notesRef.current.findIndex((n) => n.id === targetId);
+      if (from < 0 || to < 0 || from === to) return;
+      const next = [...notesRef.current];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      setNotes(next);
     };
 
-  /** 松手落定：把被拖起的笔记移到悬停目标之前 */
-  const handleDrop = (event: React.DragEvent<HTMLLIElement>) => {
-    event.preventDefault();
-    const draggedId = draggedIdRef.current;
-    const overId = dragOverIdRef.current;
-    draggedIdRef.current = null;
-    dragOverIdRef.current = null;
+  const finishDrag = () => {
+    const drag = dragStateRef.current;
+    dragStateRef.current = null;
     setDraggingNoteId(null);
-    if (!draggedId || !overId || draggedId === overId) return;
-    const from = notes.findIndex((n) => n.id === draggedId);
-    const to = notes.findIndex((n) => n.id === overId);
-    if (from < 0 || to < 0 || from === to) return;
-    const next = [...notes];
-    const [moved] = next.splice(from, 1);
-    next.splice(to, 0, moved);
-    setNotes(next);
-    persistNotes(next, noteGroups);
-  };
-
-  const handleDragEnd = () => {
-    draggedIdRef.current = null;
-    dragOverIdRef.current = null;
-    setDraggingNoteId(null);
+    // 真实发生了拖拽（有重排）才持久化；单纯点击不触发
+    if (drag?.active) {
+      persistNotes(notesRef.current, noteGroups);
+    }
   };
 
   return (
@@ -285,10 +302,6 @@ export function NotesPage() {
                 setIsDeletingNote(true);
               }
             }}
-            onDragEnd={handleDragEnd}
-            onDragOver={handleDragOver}
-            onDragStart={handleDragStart}
-            onDrop={handleDrop}
             onOpenMenu={(noteId) =>
               setMenuNoteId((current) => (current === noteId ? null : noteId))
             }
@@ -296,10 +309,15 @@ export function NotesPage() {
               const target = notes.find((n) => n.id === noteId);
               if (target) setRenamingNote(target);
             }}
+            onRowPointerCancel={finishDrag}
+            onRowPointerDown={handleRowPointerDown}
+            onRowPointerMove={handleRowPointerMove}
+            onRowPointerUp={finishDrag}
             onSelectNote={(noteId) => {
               setActiveNoteId(noteId);
               setMenuNoteId(null);
             }}
+            sidebarListRef={sidebarListRef}
           />
         }
         maxSidebarWidth={420}
