@@ -698,6 +698,7 @@
   list-style: none;
   display: flex;
   flex-direction: column;
+  gap: 2px; /* 与链接侧栏分组行间距一致 */
 }
 
 /* 笔记条目行：标题按钮 + 右侧操作菜单按钮（相对定位容器） */
@@ -784,39 +785,43 @@
 
 .note-list-item {
   width: 100%;
-  min-height: 38px;
+  min-height: 34px;
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-  padding: 4px var(--space-2);
-  border-bottom: 1px solid #e2e4e7;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
   background: transparent;
-  color: #69727d;
-  font-size: 12px;
+  color: #4f5863;
+  font-size: 13px;
+  font-weight: 500;
   text-align: left;
+  transition:
+    color 120ms ease,
+    background-color 120ms ease;
 }
 
 .note-list-item strong {
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 1.3;
-  color: #3d4652;
+  font-weight: inherit;
+  color: inherit;
 }
 
-.note-list-item.is-active strong {
-  font-weight: 600;
-  color: #2d3643;
+.note-list-item:hover {
+  background: rgba(255, 255, 255, 0.7);
+  color: #252a31;
 }
 
-.note-list-item.is-active span {
-  color: #69727d;
+.note-list-item.is-active {
+  color: #1f5ebd;
+  background: rgba(219, 231, 250, 0.88);
+  font-weight: 650;
+  box-shadow: inset 0 0 0 1px rgba(49, 116, 223, 0.08);
 }
 
-.note-list-item span {
-  margin-top: 2px;
-  color: #8b939d;
-  font-size: 11px;
+/* 拖拽中的条目半透明提示 */
+.note-list-item.is-dragging {
+  opacity: 0.5;
 }
 
 .note-editor {

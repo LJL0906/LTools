@@ -11,9 +11,16 @@ import { NoteEditor } from "../features/notes/NoteEditor";
 import { NoteMenu } from "../features/notes/NoteMenu";
 import { NoteRenameDialog } from "../features/notes/NoteRenameDialog";
 import type { NoteItem } from "../features/notes/types";
+import type { GroupItem } from "../features/groups/types";
 import { useNoteTarget } from "../App";
 import { loadState, STORAGE_KEYS } from "../lib/storage";
-import { deleteNote, isTauriRuntime, loadNotesData, upsertNote } from "../lib/data";
+import {
+  deleteNote,
+  isTauriRuntime,
+  loadNotesData,
+  persistNotes,
+  upsertNote,
+} from "../lib/data";
 
 const initialNotes: NoteItem[] = [
   {
@@ -41,24 +48,32 @@ const initialNotes: NoteItem[] = [
 
 interface NotesSidebarProps {
   activeNoteId: string;
+  draggingNoteId: string | null;
   menuNoteId: string | null;
   notes: NoteItem[];
   onCloseMenu: () => void;
   onCreateNote: () => void;
   onDeleteNote: (noteId: string) => void;
+  onDragEnd: () => void;
+  onDragOver: (noteId: string) => (event: React.DragEvent<HTMLLIElement>) => void;
+  onDragStart: (noteId: string) => (event: React.DragEvent<HTMLLIElement>) => void;
   onOpenMenu: (noteId: string) => void;
   onRenameNote: (noteId: string) => void;
   onSelectNote: (noteId: string) => void;
 }
 
-/** 笔记侧栏：扁平笔记列表（无分组层级），条目右侧操作菜单（重命名/删除） */
+/** 笔记侧栏：扁平笔记列表（无分组层级），支持拖拽排序，条目右侧操作菜单 */
 function NotesSidebar({
   activeNoteId,
+  draggingNoteId,
   menuNoteId,
   notes,
   onCloseMenu,
   onCreateNote,
   onDeleteNote,
+  onDragEnd,
+  onDragOver,
+  onDragStart,
   onOpenMenu,
   onRenameNote,
   onSelectNote,
@@ -73,13 +88,20 @@ function NotesSidebar({
       {notes.length > 0 ? (
         <ul className="notes-sidebar__list" role="list" aria-label="笔记列表">
           {notes.map((note) => (
-            <li className="notes-sidebar__item" key={note.id}>
+            <li
+              className="notes-sidebar__item"
+              draggable
+              key={note.id}
+              onDragEnd={onDragEnd}
+              onDragOver={onDragOver(note.id)}
+              onDragStart={onDragStart(note.id)}
+            >
               <button
                 aria-current={note.id === activeNoteId ? "true" : undefined}
                 aria-label={note.title}
                 className={`note-list-item${
                   note.id === activeNoteId ? " is-active" : ""
-                }`}
+                }${draggingNoteId === note.id ? " is-dragging" : ""}`}
                 onClick={() => onSelectNote(note.id)}
                 type="button"
               >
@@ -119,10 +141,13 @@ function NotesSidebar({
 export function NotesPage() {
   const { searchQuery } = useOutletContext<AppOutletContext>();
   const [notes, setNotes] = useState(() => loadState(STORAGE_KEYS.notes, initialNotes));
+  const [noteGroups, setNoteGroups] = useState<GroupItem[]>([]);
   const [activeNoteId, setActiveNoteId] = useState(initialNotes[0].id);
   const [menuNoteId, setMenuNoteId] = useState<string | null>(null);
   const [renamingNote, setRenamingNote] = useState<NoteItem | null>(null);
   const [isDeletingNote, setIsDeletingNote] = useState(false);
+  // 拖拽排序中被拖起的笔记 id（用于高亮与去重）
+  const [draggingNoteId, setDraggingNoteId] = useState<string | null>(null);
 
   // 快捷搜索选中的目标笔记（来自 open-note 事件）：选中并保证可见
   const { targetNoteId, consumeTarget } = useNoteTarget();
@@ -179,14 +204,43 @@ export function NotesPage() {
   useEffect(() => {
     if (!isTauriRuntime()) return;
     let disposed = false;
-    void loadNotesData().then(({ notes: dbNotes }) => {
+    void loadNotesData().then(({ notes: dbNotes, noteGroups: dbGroups }) => {
       if (disposed) return;
       setNotes(dbNotes);
+      setNoteGroups(dbGroups);
     });
     return () => {
       disposed = true;
     };
   }, []);
+
+  // -------------------------------------------------------------------------
+  // 拖拽排序：把被拖起的笔记移到目标项之前；持久化排序结果（含分组数据）
+  // -------------------------------------------------------------------------
+  const handleDragStart =
+    (noteId: string) => (event: React.DragEvent<HTMLLIElement>) => {
+      setDraggingNoteId(noteId);
+      event.dataTransfer?.setData("text/plain", noteId);
+      if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+    };
+
+  const handleDragOver =
+    (targetId: string) => (event: React.DragEvent<HTMLLIElement>) => {
+      // 必须 preventDefault 才允许 HTML5 拖拽投放
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+      if (!draggingNoteId || draggingNoteId === targetId) return;
+      const from = notes.findIndex((n) => n.id === draggingNoteId);
+      const to = notes.findIndex((n) => n.id === targetId);
+      if (from < 0 || to < 0 || from === to) return;
+      const next = [...notes];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      setNotes(next);
+      persistNotes(next, noteGroups);
+    };
+
+  const handleDragEnd = () => setDraggingNoteId(null);
 
   return (
     <TooltipProvider>
@@ -195,6 +249,7 @@ export function NotesPage() {
         sidebar={
           <NotesSidebar
             activeNoteId={activeNote?.id ?? ""}
+            draggingNoteId={draggingNoteId}
             menuNoteId={menuNoteId}
             notes={filteredNotes}
             onCloseMenu={() => setMenuNoteId(null)}
@@ -206,6 +261,9 @@ export function NotesPage() {
                 setIsDeletingNote(true);
               }
             }}
+            onDragEnd={handleDragEnd}
+            onDragOver={handleDragOver}
+            onDragStart={handleDragStart}
             onOpenMenu={(noteId) =>
               setMenuNoteId((current) => (current === noteId ? null : noteId))
             }

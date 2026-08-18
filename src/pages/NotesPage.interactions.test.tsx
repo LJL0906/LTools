@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
@@ -289,6 +289,39 @@ describe("notes CRUD persistence (Tauri per-record commands)", () => {
     expect(
       screen.queryByRole("button", { name: "接口排查记录" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("reorders notes by dragging onto another item", async () => {
+    renderNotesPage();
+    await screen.findByRole("button", { name: "项目会议记录" });
+
+    const firstLi = screen.getByRole("button", { name: "项目会议记录" }).closest("li") as HTMLElement;
+    const third = screen.getByRole("button", { name: "发布检查清单" }).closest("li") as HTMLElement;
+
+    fireEvent.dragStart(firstLi, {
+      dataTransfer: { setData: () => undefined, effectAllowed: "" },
+    });
+    // 等待 draggingNoteId 状态更新（真实拖拽中 dragStart 与后续 dragover 之间有时序）
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "项目会议记录" })).toHaveClass(
+        "is-dragging",
+      ),
+    );
+    fireEvent.dragOver(third, {
+      dataTransfer: { dropEffect: "" },
+    });
+    fireEvent.dragEnd(firstLi);
+
+    // 把第一项拖到第三项上方 → 插到第三项之前，顺序为 接口排查记录 / 发布检查清单 / 项目会议记录
+    await waitFor(() => {
+      const items = screen
+        .getAllByRole("button")
+        .map((b) => b.getAttribute("aria-label"))
+        .filter((label): label is string => !!label && !label.startsWith("操作"));
+      expect(items[0]).toBe("接口排查记录");
+      expect(items[1]).toBe("发布检查清单");
+      expect(items[2]).toBe("项目会议记录");
+    });
   });
 });
 
