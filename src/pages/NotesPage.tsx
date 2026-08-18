@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { FileText, MoreHorizontal, Trash2 } from "lucide-react";
 import { TooltipProvider } from "@/components/shadcn/ui/tooltip";
@@ -57,6 +57,7 @@ interface NotesSidebarProps {
   onDragEnd: () => void;
   onDragOver: (noteId: string) => (event: React.DragEvent<HTMLLIElement>) => void;
   onDragStart: (noteId: string) => (event: React.DragEvent<HTMLLIElement>) => void;
+  onDrop: (event: React.DragEvent<HTMLLIElement>) => void;
   onOpenMenu: (noteId: string) => void;
   onRenameNote: (noteId: string) => void;
   onSelectNote: (noteId: string) => void;
@@ -74,6 +75,7 @@ function NotesSidebar({
   onDragEnd,
   onDragOver,
   onDragStart,
+  onDrop,
   onOpenMenu,
   onRenameNote,
   onSelectNote,
@@ -95,6 +97,7 @@ function NotesSidebar({
               onDragEnd={onDragEnd}
               onDragOver={onDragOver(note.id)}
               onDragStart={onDragStart(note.id)}
+              onDrop={onDrop}
             >
               <button
                 aria-current={note.id === activeNoteId ? "true" : undefined}
@@ -148,6 +151,10 @@ export function NotesPage() {
   const [isDeletingNote, setIsDeletingNote] = useState(false);
   // 拖拽排序中被拖起的笔记 id（用于高亮与去重）
   const [draggingNoteId, setDraggingNoteId] = useState<string | null>(null);
+  // 拖拽过程中用 ref 记录状态：HTML5 拖拽的事件回调里读取 state 会拿到旧值，
+  // 且 dragover 阶段频繁触发，用 ref 可避免多余渲染
+  const draggedIdRef = useRef<string | null>(null);
+  const dragOverIdRef = useRef<string | null>(null);
 
   // 快捷搜索选中的目标笔记（来自 open-note 事件）：选中并保证可见
   const { targetNoteId, consumeTarget } = useNoteTarget();
@@ -215,10 +222,12 @@ export function NotesPage() {
   }, []);
 
   // -------------------------------------------------------------------------
-  // 拖拽排序：把被拖起的笔记移到目标项之前；持久化排序结果（含分组数据）
+  // 拖拽排序：拖动期间不重排（保持 DOM 稳定，避免 dragover 事件链被打断，
+  // dropEffect 被重置导致光标显示禁用）；drop 松手时一次性落定排序。
   // -------------------------------------------------------------------------
   const handleDragStart =
     (noteId: string) => (event: React.DragEvent<HTMLLIElement>) => {
+      draggedIdRef.current = noteId;
       setDraggingNoteId(noteId);
       event.dataTransfer?.setData("text/plain", noteId);
       if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
@@ -226,21 +235,36 @@ export function NotesPage() {
 
   const handleDragOver =
     (targetId: string) => (event: React.DragEvent<HTMLLIElement>) => {
-      // 必须 preventDefault 才允许 HTML5 拖拽投放
+      // 必须 preventDefault 才允许 HTML5 拖拽投放（否则 dropEffect 为 none → 禁用光标）
       event.preventDefault();
       if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
-      if (!draggingNoteId || draggingNoteId === targetId) return;
-      const from = notes.findIndex((n) => n.id === draggingNoteId);
-      const to = notes.findIndex((n) => n.id === targetId);
-      if (from < 0 || to < 0 || from === to) return;
-      const next = [...notes];
-      const [moved] = next.splice(from, 1);
-      next.splice(to, 0, moved);
-      setNotes(next);
-      persistNotes(next, noteGroups);
+      dragOverIdRef.current = targetId;
     };
 
-  const handleDragEnd = () => setDraggingNoteId(null);
+  /** 松手落定：把被拖起的笔记移到悬停目标之前 */
+  const handleDrop = (event: React.DragEvent<HTMLLIElement>) => {
+    event.preventDefault();
+    const draggedId = draggedIdRef.current;
+    const overId = dragOverIdRef.current;
+    draggedIdRef.current = null;
+    dragOverIdRef.current = null;
+    setDraggingNoteId(null);
+    if (!draggedId || !overId || draggedId === overId) return;
+    const from = notes.findIndex((n) => n.id === draggedId);
+    const to = notes.findIndex((n) => n.id === overId);
+    if (from < 0 || to < 0 || from === to) return;
+    const next = [...notes];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    setNotes(next);
+    persistNotes(next, noteGroups);
+  };
+
+  const handleDragEnd = () => {
+    draggedIdRef.current = null;
+    dragOverIdRef.current = null;
+    setDraggingNoteId(null);
+  };
 
   return (
     <TooltipProvider>
@@ -264,6 +288,7 @@ export function NotesPage() {
             onDragEnd={handleDragEnd}
             onDragOver={handleDragOver}
             onDragStart={handleDragStart}
+            onDrop={handleDrop}
             onOpenMenu={(noteId) =>
               setMenuNoteId((current) => (current === noteId ? null : noteId))
             }

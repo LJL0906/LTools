@@ -301,14 +301,11 @@ describe("notes CRUD persistence (Tauri per-record commands)", () => {
     fireEvent.dragStart(firstLi, {
       dataTransfer: { setData: () => undefined, effectAllowed: "" },
     });
-    // 等待 draggingNoteId 状态更新（真实拖拽中 dragStart 与后续 dragover 之间有时序）
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "项目会议记录" })).toHaveClass(
-        "is-dragging",
-      ),
-    );
     fireEvent.dragOver(third, {
       dataTransfer: { dropEffect: "" },
+    });
+    fireEvent.drop(third, {
+      dataTransfer: { getData: () => "meeting" },
     });
     fireEvent.dragEnd(firstLi);
 
