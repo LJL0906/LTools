@@ -1,5 +1,4 @@
-﻿import { Pencil, Trash2 } from "lucide-react";
-import type { GroupItem } from "./types";
+﻿import type { GroupItem } from "./types";
 
 interface GroupMenuProps {
   group: GroupItem;
@@ -22,7 +21,6 @@ export function GroupMenu({ group, onClose, onDelete, onRename }: GroupMenuProps
           }}
           type="button"
         >
-          <Pencil size={14} aria-hidden="true" />
           重命名
         </button>
         <button
@@ -33,7 +31,6 @@ export function GroupMenu({ group, onClose, onDelete, onRename }: GroupMenuProps
           }}
           type="button"
         >
-          <Trash2 size={14} aria-hidden="true" />
           删除分组
         </button>
       </div>

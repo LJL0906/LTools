@@ -8,9 +8,7 @@ import {
   FolderPlus,
   Inbox,
   MoreHorizontal,
-  Pencil,
   SearchX,
-  Trash2,
 } from "lucide-react";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -420,7 +418,6 @@ export function LinksPage({ searchQuery = "" }: LinksPageProps) {
                                         }}
                                         type="button"
                                       >
-                                        <Pencil size={14} aria-hidden="true" />
                                         编辑
                                       </button>
                                       <button
@@ -432,7 +429,6 @@ export function LinksPage({ searchQuery = "" }: LinksPageProps) {
                                         }}
                                         type="button"
                                       >
-                                        <Trash2 size={14} aria-hidden="true" />
                                         删除
                                       </button>
                                     </div>

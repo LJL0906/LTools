@@ -1,5 +1,3 @@
-import { Pencil, Trash2 } from "lucide-react";
-
 interface NoteMenuProps {
   noteTitle: string;
   onClose: () => void;
@@ -22,7 +20,6 @@ export function NoteMenu({ noteTitle, onClose, onDelete, onRename }: NoteMenuPro
           }}
           type="button"
         >
-          <Pencil size={14} aria-hidden="true" />
           重命名
         </button>
         <button
@@ -33,7 +30,6 @@ export function NoteMenu({ noteTitle, onClose, onDelete, onRename }: NoteMenuPro
           }}
           type="button"
         >
-          <Trash2 size={14} aria-hidden="true" />
           删除笔记
         </button>
       </div>
