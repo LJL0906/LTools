@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { Switch } from "@/components/shadcn/ui/switch";
 import { Button } from "../components/ui/Button";
 import {
+  DEFAULT_MODULES,
   DEFAULT_SETTINGS,
   MIN_WINDOW_HEIGHT,
   MIN_WINDOW_WIDTH,
@@ -20,6 +21,7 @@ import {
   type AppSettings,
   type BackupData,
 } from "../features/settings/types";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/shadcn/ui/select";
 import { loadState, saveState, STORAGE_KEYS } from "../lib/storage";
 import { getAllData, isTauriRuntime, saveAllData } from "../lib/data";
 import { ShortcutRecorder } from "../components/ui/ShortcutRecorder";
@@ -394,6 +396,30 @@ export function SettingsPage() {
         <h2 className="settings-section__title" id="settings-window">
           窗口
         </h2>
+        <SettingsRow
+          description="启动主窗口时默认显示的模块（手动切换不受影响）。"
+          label="默认显示模块"
+        >
+          <Select
+            disabled={settings === null}
+            onValueChange={(value) => {
+              if (!settings) return;
+              void persist({ ...settings, default_module: value });
+            }}
+            value={settings?.default_module ?? "links"}
+          >
+            <SelectTrigger aria-label="默认显示模块" className="settings-module-select">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {DEFAULT_MODULES.map((m) => (
+                <SelectItem key={m.value} value={m.value}>
+                  {m.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </SettingsRow>
         <SettingsRow
           description={`自定义主窗口尺寸（px），最小值 ${MIN_WINDOW_WIDTH}×${MIN_WINDOW_HEIGHT}。`}
           label="窗口尺寸"

@@ -1,4 +1,5 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { TooltipProvider } from "../components/shadcn/ui/tooltip";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
@@ -67,7 +68,7 @@ describe("QuickSearchPage", () => {
   it("searches links and notes from the data layer", async () => {
     mockTauri();
     const user = userEvent.setup();
-    render(<QuickSearchPage />);
+    render(<TooltipProvider><QuickSearchPage /></TooltipProvider>);
 
     await user.type(
       await screen.findByRole("textbox", { name: "快捷搜索" }),
@@ -85,7 +86,7 @@ describe("QuickSearchPage", () => {
   it("opens a link result in the system browser", async () => {
     mockTauri();
     const user = userEvent.setup();
-    render(<QuickSearchPage />);
+    render(<TooltipProvider><QuickSearchPage /></TooltipProvider>);
 
     await user.type(
       await screen.findByRole("textbox", { name: "快捷搜索" }),
@@ -93,13 +94,17 @@ describe("QuickSearchPage", () => {
     );
     await user.click(await screen.findByText("API 文档"));
 
+    // 打开浏览器后隐藏搜索窗口（链接结果与笔记行为一致，避免窗口滞留）
     expect(mockedOpenUrl).toHaveBeenCalledWith("https://example.com/api");
+    await waitFor(() =>
+      expect(mockedInvoke).toHaveBeenCalledWith("hide_search_window"),
+    );
   });
 
   it("shows a Baidu search fallback when the query matches nothing, Enter opens it", async () => {
     mockTauri();
     const user = userEvent.setup();
-    render(<QuickSearchPage />);
+    render(<TooltipProvider><QuickSearchPage /></TooltipProvider>);
 
     await user.type(
       await screen.findByRole("textbox", { name: "快捷搜索" }),
@@ -112,10 +117,15 @@ describe("QuickSearchPage", () => {
     expect(option).toHaveAttribute("aria-selected", "true");
     expect(screen.queryByText("没有找到匹配内容")).not.toBeInTheDocument();
 
-    // 回车打开系统默认浏览器搜索关键词
+    // 回车打开系统默认浏览器搜索关键词，并隐藏搜索窗口
     await user.keyboard("{Enter}");
-    expect(mockedOpenUrl).toHaveBeenCalledWith(
-      "https://www.baidu.com/s?wd=" + encodeURIComponent("不存在的关键词"),
+    await waitFor(() =>
+      expect(mockedOpenUrl).toHaveBeenCalledWith(
+        "https://www.baidu.com/s?wd=" + encodeURIComponent("不存在的关键词"),
+      ),
+    );
+    await waitFor(() =>
+      expect(mockedInvoke).toHaveBeenCalledWith("hide_search_window"),
     );
   });
 
@@ -149,7 +159,7 @@ describe("QuickSearchPage", () => {
       return Promise.resolve(undefined);
     });
     const user = userEvent.setup();
-    render(<QuickSearchPage />);
+    render(<TooltipProvider><QuickSearchPage /></TooltipProvider>);
 
     await user.type(
       await screen.findByRole("textbox", { name: "快捷搜索" }),
@@ -205,7 +215,7 @@ describe("QuickSearchPage", () => {
       return Promise.resolve(undefined);
     });
     const user = userEvent.setup();
-    render(<QuickSearchPage />);
+    render(<TooltipProvider><QuickSearchPage /></TooltipProvider>);
 
     await user.type(
       await screen.findByRole("textbox", { name: "快捷搜索" }),
@@ -230,7 +240,7 @@ describe("QuickSearchPage", () => {
   it("opens the first result with Enter directly", async () => {
     mockTauri();
     const user = userEvent.setup();
-    render(<QuickSearchPage />);
+    render(<TooltipProvider><QuickSearchPage /></TooltipProvider>);
 
     await user.type(
       await screen.findByRole("textbox", { name: "快捷搜索" }),
@@ -244,7 +254,7 @@ describe("QuickSearchPage", () => {
   it("invokes open_note_in_main when a note result is clicked", async () => {
     mockTauri();
     const user = userEvent.setup();
-    render(<QuickSearchPage />);
+    render(<TooltipProvider><QuickSearchPage /></TooltipProvider>);
 
     await user.type(
       await screen.findByRole("textbox", { name: "快捷搜索" }),
@@ -255,12 +265,14 @@ describe("QuickSearchPage", () => {
     expect(mockedInvoke).toHaveBeenCalledWith("open_note_in_main", {
       noteId: "n1",
     });
+    // 笔记走主窗口联动，不应额外隐藏搜索窗口（Rust 侧 open_note_in_main 负责）
+    expect(mockedInvoke).not.toHaveBeenCalledWith("hide_search_window");
   });
 
   it("invokes open_main_window when the open-main button is clicked", async () => {
     mockTauri();
     const user = userEvent.setup();
-    render(<QuickSearchPage />);
+    render(<TooltipProvider><QuickSearchPage /></TooltipProvider>);
 
     await user.click(
       await screen.findByRole("button", { name: "打开主窗口" }),
@@ -282,7 +294,7 @@ describe("QuickSearchPage", () => {
       return Promise.resolve(() => undefined as unknown as UnlistenFn);
     });
 
-    render(<QuickSearchPage />);
+    render(<TooltipProvider><QuickSearchPage /></TooltipProvider>);
 
     const input = (await screen.findByRole("textbox", {
       name: "快捷搜索",
@@ -307,7 +319,7 @@ describe("QuickSearchPage", () => {
     });
 
     const user = userEvent.setup();
-    render(<QuickSearchPage />);
+    render(<TooltipProvider><QuickSearchPage /></TooltipProvider>);
 
     // 首次唤起：能搜到初始数据
     await user.type(
@@ -350,7 +362,7 @@ describe("QuickSearchPage", () => {
   it("shows recently opened items when the query is empty, badges distinguish links and notes", async () => {
     mockTauri();
     const user = userEvent.setup();
-    render(<QuickSearchPage />);
+    render(<TooltipProvider><QuickSearchPage /></TooltipProvider>);
 
     // 打开一条链接
     await user.type(
@@ -370,15 +382,15 @@ describe("QuickSearchPage", () => {
     expect(items).toHaveLength(2);
     expect(items[0]).toHaveTextContent("会议记录");
     expect(items[1]).toHaveTextContent("API 文档");
-    // 链接与笔记徽标共存
-    expect(screen.getAllByText("笔记")).toHaveLength(1);
-    expect(screen.getAllByText("链接")).toHaveLength(1);
+    // 链接与笔记图标徽标共存（aria-label 标识类型）
+    expect(screen.getAllByLabelText("笔记")).toHaveLength(1);
+    expect(screen.getAllByLabelText("链接")).toHaveLength(1);
   });
 
   it("navigates history with arrow keys and opens the selected item with Enter", async () => {
     mockTauri();
     const user = userEvent.setup();
-    render(<QuickSearchPage />);
+    render(<TooltipProvider><QuickSearchPage /></TooltipProvider>);
 
     await user.type(
       await screen.findByRole("textbox", { name: "快捷搜索" }),
@@ -392,10 +404,45 @@ describe("QuickSearchPage", () => {
     await user.clear(screen.getByRole("textbox", { name: "快捷搜索" }));
     const items = screen.getAllByRole("option");
     expect(items).toHaveLength(2);
-    // 默认选中第一项（笔记），↓ 到第二项（链接）回车打开
+    // 默认不选中任何历史条目
+    expect(items[0]).toHaveAttribute("aria-selected", "false");
+    expect(items[1]).toHaveAttribute("aria-selected", "false");
+    // 第一次 ↓ 选中第一项（笔记），再 ↓ 到第二项（链接）回车打开
+    await user.keyboard("{ArrowDown}");
     expect(items[0]).toHaveAttribute("aria-selected", "true");
     await user.keyboard("{ArrowDown}");
     expect(items[1]).toHaveAttribute("aria-selected", "true");
+    await user.keyboard("{Enter}");
+    expect(mockedOpenUrl).toHaveBeenCalledWith("https://example.com/api");
+  });
+
+  it("does not preselect a history item and Enter does nothing until a selection is made", async () => {
+    mockTauri();
+    const user = userEvent.setup();
+    render(<TooltipProvider><QuickSearchPage /></TooltipProvider>);
+
+    // 打开一条链接以产生历史
+    await user.type(
+      await screen.findByRole("textbox", { name: "快捷搜索" }),
+      "API",
+    );
+    await user.keyboard("{Enter}");
+
+    // 清空输入 → 展示「最近使用」历史，但默认不选中任何条目
+    await user.clear(screen.getByRole("textbox", { name: "快捷搜索" }));
+    expect(screen.getByText("最近使用")).toBeInTheDocument();
+    const items = screen.getAllByRole("option");
+    expect(items).toHaveLength(1);
+    expect(items[0]).toHaveAttribute("aria-selected", "false");
+
+    // 未选中时按 Enter 不应打开任何条目
+    mockedOpenUrl.mockClear();
+    await user.keyboard("{Enter}");
+    expect(mockedOpenUrl).not.toHaveBeenCalled();
+
+    // 第一次 ↓ 才选中第一项，回车打开
+    await user.keyboard("{ArrowDown}");
+    expect(items[0]).toHaveAttribute("aria-selected", "true");
     await user.keyboard("{Enter}");
     expect(mockedOpenUrl).toHaveBeenCalledWith("https://example.com/api");
   });
@@ -417,7 +464,7 @@ describe("QuickSearchPage", () => {
       return Promise.resolve(undefined);
     });
     const user = userEvent.setup();
-    render(<QuickSearchPage />);
+    render(<TooltipProvider><QuickSearchPage /></TooltipProvider>);
     const input = await screen.findByRole("textbox", { name: "快捷搜索" });
 
     // 依次打开 6 条不同链接
@@ -444,10 +491,86 @@ describe("QuickSearchPage", () => {
     expect(reordered[4]).toHaveTextContent("文档 2");
   });
 
+  it("clears the hover selection when the mouse moves off an item onto list whitespace", async () => {
+    mockTauri();
+    const user = userEvent.setup();
+    render(<TooltipProvider><QuickSearchPage /></TooltipProvider>);
+
+    // 打开一条链接以产生历史
+    await user.type(
+      await screen.findByRole("textbox", { name: "快捷搜索" }),
+      "API",
+    );
+    await user.keyboard("{Enter}");
+
+    // 清空输入 → 历史列表
+    await user.clear(screen.getByRole("textbox", { name: "快捷搜索" }));
+    const list = screen.getByRole("listbox", { name: "最近使用" });
+    const item = list.querySelector('[role="option"]') as HTMLElement;
+
+    // 鼠标悬停条目 → 选中
+    fireEvent.mouseEnter(item);
+    expect(item).toHaveAttribute("aria-selected", "true");
+
+    // 鼠标移到列表空白处（仍在列表容器内）→ 清除选中
+    fireEvent.mouseMove(list);
+    expect(item).toHaveAttribute("aria-selected", "false");
+  });
+
+  it("clears the hover selection when the mouse leaves the search results list", async () => {
+    mockTauri();
+    mockedInvoke.mockImplementation((cmd: string) => {
+      if (cmd === "get_all_data") {
+        return Promise.resolve({
+          ...DB_DATA,
+          links: [
+            {
+              id: "l1",
+              title: "Alpha 文档",
+              protocol: "https",
+              address: "a.example.com",
+              notes: "",
+              groupId: null,
+            },
+            {
+              id: "l2",
+              title: "Beta 文档",
+              protocol: "https",
+              address: "b.example.com",
+              notes: "",
+              groupId: null,
+            },
+          ],
+        });
+      }
+      return Promise.resolve(undefined);
+    });
+    const user = userEvent.setup();
+    render(<TooltipProvider><QuickSearchPage /></TooltipProvider>);
+
+    await user.type(
+      await screen.findByRole("textbox", { name: "快捷搜索" }),
+      "文档",
+    );
+    const list = screen.getByRole("listbox", { name: "搜索结果" });
+    const options = list.querySelectorAll('[role="option"]');
+    expect(options).toHaveLength(2);
+
+    // 悬停第二项 → 选中切换
+    fireEvent.mouseEnter(options[1]);
+    expect(options[1]).toHaveAttribute("aria-selected", "true");
+    expect(options[0]).toHaveAttribute("aria-selected", "false");
+
+    // 鼠标离开列表 → 清除选中
+    fireEvent.mouseLeave(list);
+    expect(options[0]).toHaveAttribute("aria-selected", "false");
+    expect(options[1]).toHaveAttribute("aria-selected", "false");
+  });
+
   it("persists history to localStorage and restores it on remount", async () => {
     mockTauri();
     const user = userEvent.setup();
-    const { unmount } = render(<QuickSearchPage />);
+    const { unmount } = render(<TooltipProvider><QuickSearchPage /></TooltipProvider>);
 
     await user.type(
       await screen.findByRole("textbox", { name: "快捷搜索" }),
@@ -464,7 +587,7 @@ describe("QuickSearchPage", () => {
 
     // 重新挂载（模拟窗口重建）后历史仍在
     unmount();
-    render(<QuickSearchPage />);
+    render(<TooltipProvider><QuickSearchPage /></TooltipProvider>);
     expect(await screen.findByText("最近使用")).toBeInTheDocument();
     expect(screen.getByText("API 文档")).toBeInTheDocument();
   });

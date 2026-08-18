@@ -25,6 +25,7 @@
   --space-5: 20px;
   --space-6: 24px;
   --header-height: 64px;
+  --titlebar-height: 32px;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", system-ui, sans-serif;
   color: var(--color-text);
   background: #e9ebee;

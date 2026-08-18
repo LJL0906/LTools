@@ -82,8 +82,8 @@ powershell -ExecutionPolicy Bypass -File release.ps1 0.1.2
 ### 3.2 手动发版（等价于脚本内部步骤）
 
 ```powershell
-git tag v0.1.1
-git push origin v0.1.1
+git tag v<版本号>    # 如 v0.1.5，须高于已发布版本
+git push origin v<版本号>
 ```
 
 Actions 自动执行：

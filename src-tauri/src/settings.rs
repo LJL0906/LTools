@@ -41,6 +41,10 @@ pub struct AppSettings {
     pub db_path: Option<String>,
     /// 检查更新使用的代理地址（如 `http://127.0.0.1:7892`），None 表示不配置
     pub update_proxy: Option<String>,
+    /// 主窗口启动时默认显示的模块（links / notes / clipboard / tools），默认 links
+    pub default_module: String,
+    /// 主窗口置顶（始终显示在其他应用之上），默认关闭
+    pub always_on_top: bool,
 }
 
 impl Default for AppSettings {
@@ -55,6 +59,8 @@ impl Default for AppSettings {
             backup_dir: None,
             db_path: None,
             update_proxy: None,
+            default_module: "links".into(),
+            always_on_top: false,
         }
     }
 }
@@ -170,6 +176,9 @@ pub fn create_search_window(
     .inner_size(560.0, 440.0)
     .min_inner_size(560.0, 400.0)
     .resizable(false)
+    // 快捷搜索是临时浮层（快捷键唤起、失焦即隐藏），不占任务栏，
+    // 避免窗口未激活时方向键选中任务栏按钮触发右键菜单
+    .skip_taskbar(true)
     .center()
     .visible(visible)
     .build()
@@ -183,16 +192,35 @@ pub fn toggle_quick_search(app: &AppHandle) {
         if window.is_visible().unwrap_or(false) {
             let _ = window.hide();
         } else {
+            let _ = window.unminimize();
             let _ = window.show();
-            let _ = window.set_focus();
+            activate_after_show(window);
             let _ = app.emit("quick-search-shown", ());
         }
         return;
     }
-    // 兜底：窗口不存在（如预创建失败）时懒创建并直接显示
-    if let Err(e) = create_search_window(app, true) {
-        eprintln!("创建快捷搜索窗口失败：{e}");
+    // 兜底：窗口不存在（如预创建失败）时懒创建并直接显示 + 激活
+    if let Ok(window) = create_search_window(app, true) {
+        activate_after_show(window);
+        let _ = app.emit("quick-search-shown", ());
+    } else {
+        eprintln!("创建快捷搜索窗口失败");
     }
+}
+
+/// 显示窗口后确保其获得键盘焦点（激活）。
+///
+/// tao 的 `show` 通过线程异步更新窗口可见状态，紧随其后的 `set_focus`
+/// 可能因读到「仍不可见」而跳过激活（tao 内部要求窗口可见才执行），
+/// 导致窗口显示但未激活：键盘输入落到任务栏，方向键会选中任务栏按钮，
+/// 再按菜单键 / 回车即弹出右键菜单。因此显示后延迟一次兜底激活。
+fn activate_after_show(window: tauri::WebviewWindow) {
+    let _ = window.set_focus();
+    let wake = window.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(80));
+        let _ = wake.set_focus();
+    });
 }
 
 /// 从快捷搜索窗口打开一条笔记：唤起主窗口并通知选中该笔记，同时隐藏搜索窗口。
@@ -222,6 +250,16 @@ pub fn open_main_window(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// 隐藏快捷搜索窗口（打开链接 / 百度搜索兜底后调用：链接在系统浏览器中打开，
+/// 无需主窗口介入，隐藏搜索窗口避免其滞留造成"打开有延迟"的体感）。
+#[tauri::command]
+pub fn hide_search_window(app: AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("search") {
+        let _ = window.hide();
+    }
+    Ok(())
+}
+
 /// 显示主窗口（取消最小化 → 显示 → 聚焦）。
 fn show_main_window<R: tauri::Runtime>(app: &AppHandle<R>) {
     if let Some(window) = app.get_webview_window("main") {
@@ -231,17 +269,27 @@ fn show_main_window<R: tauri::Runtime>(app: &AppHandle<R>) {
     }
 }
 
-/// 切换主窗口显示 / 隐藏（全局快捷键使用，显隐循环）：
-/// 窗口可见且未最小化 → 隐藏到托盘；隐藏/最小化 → 显示并聚焦。
+/// 切换主窗口显示 / 隐藏（全局快捷键使用）：
+/// - 隐藏或最小化 → 显示并聚焦；
+/// - 已显示且聚焦 → 隐藏到托盘；
+/// - 已显示但未聚焦（用户点击过其他窗口）→ 只带回前台，不隐藏，
+///   避免「点击其他地方后再按快捷键，第一次按反而把窗口藏起来，
+///   必须按两次才能唤回」的体验问题。
 /// 注意：托盘图标与菜单仍用 `show_main_window`（只显示），避免误触隐藏。
 fn toggle_main_window<R: tauri::Runtime>(app: &AppHandle<R>) {
     if let Some(window) = app.get_webview_window("main") {
-        let shown = window.is_visible().unwrap_or(false) && !window.is_minimized().unwrap_or(false);
-        if shown {
-            let _ = window.hide();
-        } else {
+        let visible = window.is_visible().unwrap_or(false);
+        let minimized = window.is_minimized().unwrap_or(false);
+        if !visible || minimized {
             let _ = window.unminimize();
             let _ = window.show();
+            let _ = window.set_focus();
+            return;
+        }
+        // 已显示且未最小化：聚焦则隐藏，未聚焦则带回前台
+        if window.is_focused().unwrap_or(false) {
+            let _ = window.hide();
+        } else {
             let _ = window.set_focus();
         }
     }
@@ -251,8 +299,9 @@ fn toggle_main_window<R: tauri::Runtime>(app: &AppHandle<R>) {
 /// 左键单击托盘图标同样显示主窗口。
 pub fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
     let show = MenuItem::with_id(app, "show", "显示主窗口", true, None::<&str>)?;
+    let restart = MenuItem::with_id(app, "restart", "重启应用", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show, &quit])?;
+    let menu = Menu::with_items(app, &[&show, &restart, &quit])?;
 
     let icon = app
         .default_window_icon()
@@ -266,6 +315,7 @@ pub fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
             "show" => show_main_window(app),
+            "restart" => app.restart(),
             "quit" => app.exit(0),
             _ => {}
         })
@@ -302,9 +352,13 @@ pub fn set_settings(
     db_state: State<'_, crate::db::DbState>,
     settings: AppSettings,
 ) -> Result<(), String> {
-    let db_path_changed = {
+    let (db_path_changed, size_changed) = {
         let current = state.0.lock().unwrap();
-        current.db_path != settings.db_path
+        (
+            current.db_path != settings.db_path,
+            current.window_width != settings.window_width
+                || current.window_height != settings.window_height,
+        )
     };
 
     // 0. 先验证并应用快捷键（失败则提示，不保存设置）
@@ -325,9 +379,13 @@ pub fn set_settings(
         }
     }
 
-    // 3. 更新内存并应用即时行为（快捷键已在第 0 步应用）
+    // 3. 更新内存并应用即时行为（快捷键已在第 0 步应用）。
+    //    窗口尺寸仅在设置显式变更时重放 set_size——否则置顶等设置保存会
+    //    顺带把用户手动调整过的窗口强置回配置尺寸（「切换置顶重置宽高」）。
     *state.0.lock().unwrap() = settings.clone();
-    apply_window_size(&app, &settings);
+    if size_changed {
+        apply_window_size(&app, &settings);
+    }
 
     // 4. 数据库路径变更 → 迁移数据与设置到新库
     if db_path_changed {

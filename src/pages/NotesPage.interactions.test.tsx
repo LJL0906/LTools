@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
@@ -63,13 +63,20 @@ describe("notes static interactions", () => {
 
     expect(screen.queryByRole("button", { name: "临时记录" })).not.toBeInTheDocument();
   });
-  it("shows ungrouped notes and keeps the editor aligned with the filter", async () => {
+  it("shows all notes flat and keeps the editor aligned with the selected note", async () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "未分组" }));
-
+    // 侧栏平铺展示全部笔记，默认选中第一项
+    expect(screen.getByRole("button", { name: "项目会议记录" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "接口排查记录" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "发布检查清单" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "笔记标题" })).toHaveValue(
+      "项目会议记录",
+    );
+
+    // 点击另一条 → 编辑器跟随
+    await user.click(screen.getByRole("button", { name: "发布检查清单" }));
     expect(screen.getByRole("textbox", { name: "笔记标题" })).toHaveValue(
       "发布检查清单",
     );
@@ -230,71 +237,63 @@ describe("notes CRUD persistence (Tauri per-record commands)", () => {
     expect(mockedInvoke).toHaveBeenCalledWith("delete_note", { id: "meeting" });
   });
 
-  it("persists a new group via upsert_note_group", async () => {
+  it("renames a note via the item menu and persists it", async () => {
     const user = userEvent.setup();
     renderNotesPage();
 
     await screen.findByRole("button", { name: "项目会议记录" });
     mockedInvoke.mockClear();
 
-    await user.click(screen.getByRole("button", { name: "新建分组" }));
-    await user.type(screen.getByRole("textbox", { name: "名称" }), "新分组");
-    await user.click(screen.getByRole("button", { name: "保存" }));
-
-    expect(mockedInvoke).toHaveBeenCalledWith(
-      "upsert_note_group",
-      expect.objectContaining({
-        group: expect.objectContaining({ id: expect.any(String), name: "新分组" }),
-      }),
-    );
-  });
-
-  it("persists group rename via upsert_note_group", async () => {
-    const user = userEvent.setup();
-    renderNotesPage();
-
-    await screen.findByRole("button", { name: "项目会议记录" });
-    mockedInvoke.mockClear();
-
-    await user.click(screen.getByRole("button", { name: "管理分组 工作" }));
+    await user.click(screen.getByRole("button", { name: "操作 项目会议记录" }));
     await user.click(screen.getByRole("button", { name: "重命名" }));
 
-    const nameInput = screen.getByRole("textbox", { name: "名称" });
+    const nameInput = screen.getByRole("textbox", { name: "标题" });
     await user.clear(nameInput);
-    await user.type(nameInput, "研发");
+    await user.type(nameInput, "改名后的会议记录");
     await user.click(screen.getByRole("button", { name: "保存" }));
 
     expect(mockedInvoke).toHaveBeenCalledWith(
-      "upsert_note_group",
+      "upsert_note",
       expect.objectContaining({
-        group: expect.objectContaining({ id: "work", name: "研发" }),
+        note: expect.objectContaining({ id: "meeting", title: "改名后的会议记录" }),
       }),
+    );
+    // 侧栏与编辑器同步更新
+    expect(
+      screen.getByRole("button", { name: "改名后的会议记录" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "笔记标题" })).toHaveValue(
+      "改名后的会议记录",
     );
   });
 
-  it("persists group deletion via delete_note_group and ungroups its notes", async () => {
+  it("deletes a note through the item menu", async () => {
     const user = userEvent.setup();
     renderNotesPage();
 
-    await screen.findByRole("button", { name: "项目会议记录" });
+    await screen.findByRole("button", { name: "接口排查记录" });
     mockedInvoke.mockClear();
 
-    await user.click(screen.getByRole("button", { name: "管理分组 项目 A" }));
-    await user.click(screen.getByRole("button", { name: "删除分组" }));
+    await user.click(screen.getByRole("button", { name: "操作 接口排查记录" }));
+    // 菜单内选择「删除笔记」（编辑器右上角有同名按钮，需限定作用域；
+    // 侧栏标题与菜单标题都含「接口排查记录」，用 getAllByText 定位菜单容器）
+    const menu = screen
+      .getAllByText("接口排查记录")
+      .map((el) => el.closest(".group-menu"))
+      .find((el) => el !== null);
+    expect(menu).not.toBeNull();
+    await user.click(within(menu as HTMLElement).getByRole("button", { name: "删除笔记" }));
     await user.click(screen.getByRole("button", { name: "删除" }));
 
-    expect(mockedInvoke).toHaveBeenCalledWith("delete_note_group", {
-      id: "project-a",
-    });
-
-    // 内存 state 同步：组内笔记 groupId 置 null，出现在「未分组」
-    await user.click(screen.getByRole("button", { name: "未分组" }));
-    expect(screen.getByRole("button", { name: "项目会议记录" })).toBeInTheDocument();
+    expect(mockedInvoke).toHaveBeenCalledWith("delete_note", { id: "api-debug" });
+    expect(
+      screen.queryByRole("button", { name: "接口排查记录" }),
+    ).not.toBeInTheDocument();
   });
 });
 
 describe("notes quick-search target selection", () => {
-  it("selects the target note and expands all groups", async () => {
+  it("selects the target note from quick search", async () => {
     const consumeTarget = vi.fn();
     render(
       <MemoryRouter>

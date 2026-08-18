@@ -23,7 +23,19 @@ export interface AppSettings {
   db_path: string | null;
   /** 更新代理地址（如 http://127.0.0.1:7892），null 表示不配置（走系统代理/直连） */
   update_proxy: string | null;
+  /** 主窗口启动时默认显示的模块（links / notes / clipboard / tools） */
+  default_module: string;
+  /** 主窗口置顶（始终显示在其他应用之上） */
+  always_on_top: boolean;
 }
+
+/** 主窗口可配置的默认模块（key 为路由段，与 AppSettings.default_module 值域一致） */
+export const DEFAULT_MODULES = [
+  { value: "links", label: "链接管理" },
+  { value: "notes", label: "笔记" },
+  { value: "clipboard", label: "剪切板" },
+  { value: "tools", label: "JSON 工具" },
+] as const;
 
 export const DEFAULT_SETTINGS: AppSettings = {
   minimize_to_tray: false,
@@ -35,6 +47,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   backup_dir: null,
   db_path: null,
   update_proxy: null,
+  default_module: "links",
+  always_on_top: false,
 };
 
 /** 前端调用的 Tauri command 名 */

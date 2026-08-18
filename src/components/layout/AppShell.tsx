@@ -1,6 +1,7 @@
 ﻿import { useEffect, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { TopNavigation } from "./TopNavigation";
+import { WindowTitleBar } from "./WindowTitleBar";
 import { flushPendingSaves } from "../../lib/storage";
 import { startClipboardWatcher } from "../../lib/data";
 
@@ -44,6 +45,8 @@ export function AppShell() {
 
   return (
     <div className="app-frame">
+      {/* 自绘标题栏：置顶 / 最小化 / 最大化 / 关闭（主窗口 decorations:false） */}
+      <WindowTitleBar />
       <TopNavigation
         compactSearch={pathname === "/links"}
         onSearchChange={setSearchQuery}

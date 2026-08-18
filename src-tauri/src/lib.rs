@@ -28,6 +28,7 @@ pub fn run() {
             settings::import_backup,
             settings::open_note_in_main,
             settings::open_main_window,
+            settings::hide_search_window,
             db::get_all_data,
             db::replace_all_data,
             // 逐条 CRUD（upsert = 新增或更新单条）
@@ -74,6 +75,10 @@ pub fn run() {
                 // "启动最小化到托盘"开启时不显示主窗口
                 if !settings.minimize_to_tray {
                     let _ = window.show();
+                }
+                // 置顶设置（始终显示在其他应用之上）在启动时应用
+                if settings.always_on_top {
+                    let _ = window.set_always_on_top(true);
                 }
             }
 

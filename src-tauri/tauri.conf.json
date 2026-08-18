@@ -16,6 +16,7 @@
         "title": "LTools",
         "visible": false,
         "skipTaskbar": true,
+        "decorations": false,
         "minWidth": 640,
         "minHeight": 400
       }

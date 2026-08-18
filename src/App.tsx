@@ -14,7 +14,10 @@ import {
   useNavigate,
 } from "react-router-dom";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { DEFAULT_SETTINGS, type AppSettings } from "./features/settings/types";
+import { loadState, STORAGE_KEYS } from "./lib/storage";
 import "./App.css";
 import { AppShell } from "./components/layout/AppShell";
 import { Toaster } from "./components/shadcn/ui/sonner";
@@ -51,10 +54,15 @@ function SearchWindowRedirect() {
   return null;
 }
 
-/**
- * 笔记跳转目标：快捷搜索窗口选中笔记后，主窗口跳转到笔记页并选中目标。
- * 通过 context 传递给 NotesPage。
- */
+/** 主窗口可选模块路由段（与 AppSettings.default_module 值域一致） */
+const MODULE_PATHS = ["links", "notes", "clipboard", "tools"];
+
+/** 解析合法默认模块；配置缺失或非法时回退到 links */
+function resolveDefaultModule(value: string | undefined): string {
+  return value && MODULE_PATHS.includes(value) ? value : "links";
+}
+
+/** 主窗口跳转目标：快捷搜索窗口选中笔记后，主窗口跳转到笔记页并选中目标。 */
 const NoteTargetContext = createContext<{
   targetNoteId: string | null;
   consumeTarget: () => void;
@@ -103,6 +111,30 @@ function AppRoutes() {
     }
   }, [navigate, targetNoteId]);
 
+  // 主窗口启动时默认显示的模块（设置「默认显示模块」）；null = 设置尚未加载，
+  // 此时 index 路由不渲染重定向，避免先跳到默认 links 再跳配置模块的闪烁。
+  const [defaultModule, setDefaultModule] = useState<string | null>(null);
+  useEffect(() => {
+    let disposed = false;
+    void (async () => {
+      let value: string | undefined;
+      if (isTauriRuntime()) {
+        try {
+          const s = await invoke<AppSettings>("get_settings");
+          value = s?.default_module;
+        } catch {
+          value = loadState(STORAGE_KEYS.settings, DEFAULT_SETTINGS).default_module;
+        }
+      } else {
+        value = loadState(STORAGE_KEYS.settings, DEFAULT_SETTINGS).default_module;
+      }
+      if (!disposed) setDefaultModule(resolveDefaultModule(value));
+    })();
+    return () => {
+      disposed = true;
+    };
+  }, []);
+
   const noteTarget = useMemo(
     () => ({
       targetNoteId,
@@ -122,15 +154,21 @@ function AppRoutes() {
       <Routes>
         {/* 快捷搜索窗口：独立布局（无主窗口导航壳） */}
         <Route path="search" element={<QuickSearchPage />} />
-        {/* 主窗口：四个模块 */}
+        {/* 主窗口：四个模块（index 跳转到设置的默认模块） */}
         <Route element={<AppShell />}>
-          <Route index element={<Navigate replace to="/links" />} />
+          {defaultModule ? (
+            <Route index element={<Navigate replace to={defaultModule} />} />
+          ) : null}
           <Route path="links" element={<LinksRoutePage />} />
           <Route path="notes" element={<NotesPage />} />
           <Route path="clipboard" element={<ClipboardPage />} />
           <Route path="tools" element={<ToolsPage />} />
           <Route path="settings" element={<SettingsPage />} />
-          <Route path="*" element={<Navigate replace to="/links" />} />
+          {/* 通配符兜底同样等默认模块加载：null 时不渲染，避免在设置异步
+              加载完成前就把根路径重定向到默认 links（会抢跑配置的默认模块） */}
+          {defaultModule ? (
+            <Route path="*" element={<Navigate replace to={defaultModule} />} />
+          ) : null}
         </Route>
       </Routes>
     </NoteTargetContext.Provider>

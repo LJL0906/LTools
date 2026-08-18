@@ -3,7 +3,12 @@ import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { Search, SearchX, ExternalLink } from "lucide-react";
+import { Search, SearchX, AppWindow, Link as LinkIcon, FileText, Globe } from "lucide-react";
+import {
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/shadcn/ui/tooltip";
+import { FocusTooltip } from "@/components/ui/FocusTooltip";
 import { getAllData } from "../lib/data";
 import { isTauriRuntime } from "../lib/data";
 import type { LinkItem } from "../features/links/types";
@@ -39,8 +44,9 @@ export function QuickSearchPage() {
   const [history, setHistory] = useState<SearchResult[]>(() =>
     loadState<SearchResult[]>(STORAGE_KEYS.searchHistory, []),
   );
-  // 键盘上下选择的条目索引（0 起；列表末尾为百度搜索兜底条目）
-  const [activeIndex, setActiveIndex] = useState(0);
+  // 键盘上下选择的条目索引（0 起；列表末尾为百度搜索兜底条目）。
+  // -1 表示「无选中」：空输入展示历史时默认不选中任何一条，等用户先按 ↑/↓。
+  const [activeIndex, setActiveIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
   // 结果/历史列表容器：键盘选中项超出可视区时滚动跟随
   const listRef = useRef<HTMLUListElement>(null);
@@ -95,6 +101,7 @@ export function QuickSearchPage() {
           if (focused) {
             // 每次唤起都视为全新搜索：清空输入，回到「最近使用」历史列表
             setQuery("");
+            setActiveIndex(-1);
             inputRef.current?.focus();
             // 主窗口可能已更新数据，重新拉取最新快照
             refreshData();
@@ -122,8 +129,9 @@ export function QuickSearchPage() {
     let unlisten: UnlistenFn | undefined;
     let disposed = false;
     void listen<null>("quick-search-shown", () => {
-      // 每次窗口显示都清空输入并聚焦，展示「最近使用」历史
+      // 每次窗口显示都清空输入并聚焦，展示「最近使用」历史；默认不选中任何一条
       setQuery("");
+      setActiveIndex(-1);
       inputRef.current?.focus();
       // 主窗口可能已更新数据，重新拉取最新快照
       refreshData();
@@ -186,9 +194,10 @@ export function QuickSearchPage() {
   // 键盘导航条目总数 = 展示列表 + 百度兜底
   const totalItems = displayItems.length + (showBaiduItem ? 1 : 0);
 
-  // 输入变化时重置选中到第一项
+  // 输入变化时重置选中：空输入（最近使用历史）默认无选中（-1），
+  // 有输入（搜索结果）默认选中第一项，回车可直接打开。
   useEffect(() => {
-    setActiveIndex(0);
+    setActiveIndex(query.trim() === "" ? -1 : 0);
   }, [query]);
 
   // 选中项变化时滚动跟随：仅当选中项在可视区外才滚动（block: "nearest" 保证最小滚动距离）
@@ -210,8 +219,10 @@ export function QuickSearchPage() {
   const openResult = (result: SearchResult) => {
     recordHistory(result);
     if (result.kind === "link" && result.url) {
-      // 链接：直接用系统默认浏览器打开
-      void openUrl(result.url).catch(() => undefined);
+      // 链接：系统浏览器打开成功后隐藏搜索窗口（与笔记行为一致，避免窗口滞留）
+      void openUrl(result.url)
+        .then(() => invoke("hide_search_window"))
+        .catch(() => undefined);
       return;
     }
     // 笔记：唤起主窗口并选中该笔记（Rust 侧隐藏搜索窗口）
@@ -220,27 +231,39 @@ export function QuickSearchPage() {
 
   /** 打开当前选中条目（本地结果或百度搜索） */
   const openActive = () => {
-    if (totalItems === 0) return;
+    if (totalItems === 0 || activeIndex < 0) return;
     const idx = Math.min(activeIndex, totalItems - 1);
     if (idx < displayItems.length) {
       openResult(displayItems[idx]);
     } else if (showBaiduItem) {
-      const url = `${BAIDU_SEARCH_URL}?wd=${encodeURIComponent(baiduQuery)}`;
-      void openUrl(url).catch(() => undefined);
+      openBaidu();
     }
+  };
+
+  /** 打开百度搜索兜底：打开成功后隐藏搜索窗口（与链接结果一致） */
+  const openBaidu = () => {
+    const url = `${BAIDU_SEARCH_URL}?wd=${encodeURIComponent(baiduQuery)}`;
+    void openUrl(url)
+      .then(() => invoke("hide_search_window"))
+      .catch(() => undefined);
   };
 
   /**
    * 键盘导航核心逻辑（↑/↓ 循环移动选中，Enter 打开选中项）。
+   * 无选中（activeIndex < 0）时：↓ 选中第一项、↑ 选中最后一项。
    * 同时服务于输入框 onKeyDown 与窗口级 keydown（输入框失焦后仍可用）。
    */
   const handleListKey = (key: string, preventDefault: () => void) => {
     if (key === "ArrowDown") {
       preventDefault();
-      if (totalItems > 0) setActiveIndex((i) => (i + 1) % totalItems);
+      if (totalItems > 0) {
+        setActiveIndex((i) => (i < 0 ? 0 : (i + 1) % totalItems));
+      }
     } else if (key === "ArrowUp") {
       preventDefault();
-      if (totalItems > 0) setActiveIndex((i) => (i - 1 + totalItems) % totalItems);
+      if (totalItems > 0) {
+        setActiveIndex((i) => (i < 0 ? totalItems - 1 : (i - 1 + totalItems) % totalItems));
+      }
     } else if (key === "Enter") {
       preventDefault();
       openActive();
@@ -249,6 +272,16 @@ export function QuickSearchPage() {
 
   const handleInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) =>
     handleListKey(event.key, () => event.preventDefault());
+
+  /**
+   * 列表内鼠标移动：鼠标从条目移到列表空白处（仍在 <ul> 容器内）时清除选中。
+   * 悬停条目由 onMouseEnter 设置选中；只要鼠标落在空白处就回到无选中，
+   * 避免高亮滞留在最后悬停的条目上。
+   */
+  const handleListMouseMove = (event: React.MouseEvent<HTMLUListElement>) => {
+    if ((event.target as HTMLElement).closest(".quick-search__item")) return;
+    setActiveIndex(-1);
+  };
 
   // 窗口级键盘监听：输入框失焦（点击结果/空白区域）后 ↑/↓/Enter 仍生效；
   // 焦点在输入框时由 onKeyDown 处理，避免重复触发。
@@ -272,8 +305,15 @@ export function QuickSearchPage() {
         role="option"
         type="button"
       >
-        <span className={`quick-search__badge quick-search__badge--${result.kind}`}>
-          {result.kind === "link" ? "链接" : "笔记"}
+        <span
+          aria-label={result.kind === "link" ? "链接" : "笔记"}
+          className={`quick-search__badge quick-search__badge--${result.kind}`}
+        >
+          {result.kind === "link" ? (
+            <LinkIcon aria-hidden="true" size={13} />
+          ) : (
+            <FileText aria-hidden="true" size={13} />
+          )}
         </span>
         <span className="quick-search__item-body">
           <span className="quick-search__item-title">{result.title}</span>
@@ -286,7 +326,7 @@ export function QuickSearchPage() {
   return (
     <div className="quick-search">
       <div className="quick-search__input-row">
-        <Search aria-hidden="true" className="quick-search__icon" size={16} />
+        <Search aria-hidden="true" className="quick-search__icon" size={18} />
         <input
           aria-label="快捷搜索"
           autoFocus
@@ -297,17 +337,21 @@ export function QuickSearchPage() {
           ref={inputRef}
           value={query}
         />
-        <button
-          aria-label="打开主窗口"
-          className="quick-search__open-main"
-          onClick={() => {
-            void invoke("open_main_window").catch(() => undefined);
-          }}
-          title="打开主窗口"
-          type="button"
-        >
-          <ExternalLink aria-hidden="true" size={14} />
-        </button>
+        <FocusTooltip delayDuration={100}>
+          <TooltipTrigger asChild>
+            <button
+              aria-label="打开主窗口"
+              className="quick-search__open-main"
+              onClick={() => {
+                void invoke("open_main_window").catch(() => undefined);
+              }}
+              type="button"
+            >
+              <AppWindow aria-hidden="true" size={15} />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">打开主窗口</TooltipContent>
+        </FocusTooltip>
         <kbd className="quick-search__hint">Esc 关闭</kbd>
       </div>
 
@@ -315,7 +359,14 @@ export function QuickSearchPage() {
         history.length > 0 ? (
           <>
             <div className="quick-search__section-title">最近使用</div>
-            <ul className="quick-search__list" ref={listRef} role="listbox" aria-label="最近使用">
+            <ul
+              className="quick-search__list"
+              ref={listRef}
+              role="listbox"
+              aria-label="最近使用"
+              onMouseLeave={() => setActiveIndex(-1)}
+              onMouseMove={handleListMouseMove}
+            >
               {history.map(renderResultItem)}
             </ul>
           </>
@@ -328,7 +379,14 @@ export function QuickSearchPage() {
           没有找到匹配内容
         </div>
       ) : (
-        <ul className="quick-search__list" ref={listRef} role="listbox" aria-label="搜索结果">
+        <ul
+          className="quick-search__list"
+          ref={listRef}
+          role="listbox"
+          aria-label="搜索结果"
+          onMouseLeave={() => setActiveIndex(-1)}
+          onMouseMove={handleListMouseMove}
+        >
           {results.map(renderResultItem)}
           {showBaiduItem && (
             <li>
@@ -338,14 +396,18 @@ export function QuickSearchPage() {
                   results.length === activeIndex ? " quick-search__item--active" : ""
                 }`}
                 onClick={() => {
-                  const url = `${BAIDU_SEARCH_URL}?wd=${encodeURIComponent(baiduQuery)}`;
-                  void openUrl(url).catch(() => undefined);
+                  openBaidu();
                 }}
                 onMouseEnter={() => setActiveIndex(results.length)}
                 role="option"
                 type="button"
               >
-                <span className="quick-search__badge quick-search__badge--web">百度</span>
+                <span
+                  aria-label="百度搜索"
+                  className="quick-search__badge quick-search__badge--web"
+                >
+                  <Globe aria-hidden="true" size={13} />
+                </span>
                 <span className="quick-search__item-body">
                   <span className="quick-search__item-title">
                     在百度中搜索「{baiduQuery}」

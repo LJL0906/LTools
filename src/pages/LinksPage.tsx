@@ -401,18 +401,18 @@ export function LinksPage({ searchQuery = "" }: LinksPageProps) {
                                       }}
                                     />
                                     <div
-                                      className="link-popover"
+                                      className="group-menu"
                                       style={{
                                         position: "fixed",
                                         top: menuPosition.top,
                                         right: menuPosition.right,
                                       }}
                                     >
-                                      <div className="link-popover__label">
+                                      <div className="group-menu__title">
                                         {link.title}
                                       </div>
                                       <button
-                                        className="link-popover__item"
+                                        className="group-menu__action"
                                         onClick={() => {
                                           setEditingLink(link);
                                           setActiveMenuLinkId(null);
@@ -424,7 +424,7 @@ export function LinksPage({ searchQuery = "" }: LinksPageProps) {
                                         编辑
                                       </button>
                                       <button
-                                        className="link-popover__item link-popover__item--danger"
+                                        className="group-menu__action group-menu__action--danger"
                                         onClick={() => {
                                           setDeletingLink(link);
                                           setActiveMenuLinkId(null);
